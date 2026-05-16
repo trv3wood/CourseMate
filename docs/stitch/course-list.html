@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CourseMate - 我的课程</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#005da7",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#71d7cd",
+                        "tertiary-fixed": "#8ef4e9",
+                        "surface-container-highest": "#e0e3e6",
+                        "secondary": "#4858ab",
+                        "surface": "#f7f9fc",
+                        "secondary-container": "#96a5ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-high": "#e6e8eb",
+                        "on-secondary-fixed": "#00105b",
+                        "on-error-container": "#93000a",
+                        "inverse-on-surface": "#eff1f4",
+                        "surface-container-lowest": "#ffffff",
+                        "background": "#f7f9fc",
+                        "on-tertiary-fixed": "#00201d",
+                        "outline-variant": "#c1c7d3",
+                        "error": "#ba1a1a",
+                        "on-surface-variant": "#414751",
+                        "surface-container": "#eceef1",
+                        "on-primary-container": "#fdfcff",
+                        "surface-variant": "#e0e3e6",
+                        "inverse-primary": "#a4c9ff",
+                        "inverse-surface": "#2d3133",
+                        "on-primary-fixed-variant": "#004883",
+                        "on-secondary-fixed-variant": "#2f3f92",
+                        "on-primary-fixed": "#001c39",
+                        "secondary-fixed-dim": "#bac3ff",
+                        "surface-bright": "#f7f9fc",
+                        "primary-container": "#2976c7",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-container": "#f3fffc",
+                        "on-primary": "#ffffff",
+                        "primary-fixed-dim": "#a4c9ff",
+                        "outline": "#717783",
+                        "tertiary": "#006860",
+                        "on-background": "#191c1e",
+                        "surface-tint": "#0060ac",
+                        "tertiary-container": "#00837a",
+                        "on-tertiary-fixed-variant": "#00504a",
+                        "primary-fixed": "#d4e3ff",
+                        "on-secondary-container": "#27378a",
+                        "on-surface": "#191c1e",
+                        "secondary-fixed": "#dee0ff",
+                        "on-error": "#ffffff",
+                        "surface-container-low": "#f2f4f7",
+                        "surface-dim": "#d8dadd"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "8px",
+                        "sm": "8px",
+                        "xs": "4px",
+                        "container-padding": "16px",
+                        "margin-mobile": "16px",
+                        "gutter-mobile": "12px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "xl": "32px"
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #f7f9fc;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .course-card-shadow {
+            box-shadow: 0 2px 8px -2px rgba(0, 93, 167, 0.08);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-['Inter'] text-on-surface">
+<div class="flex flex-col min-h-screen max-w-md mx-auto bg-surface relative">
+<!-- Header Section -->
+<header class="sticky top-0 z-30 bg-surface/80 backdrop-blur-md">
+<div class="flex items-center p-4 justify-between">
+<h1 class="text-on-surface text-headline-md font-bold">我的课程</h1>
+<div class="flex items-center">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'opsz' 24">search</span>
+</button>
+</div>
+</div>
+<!-- Filter Chips -->
+<div class="flex gap-3 px-4 pb-4 overflow-x-auto no-scrollbar">
+<button class="flex h-10 shrink-0 items-center justify-center px-5 rounded-xl bg-primary text-on-primary shadow-sm transition-all active:scale-95">
+<span class="text-body-md font-medium">本学期</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center px-5 rounded-xl bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all">
+<span class="text-body-md font-medium">已结课</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center px-5 rounded-xl bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all">
+<span class="text-body-md font-medium">收藏</span>
+</button>
+</div>
+</header>
+<!-- Course List -->
+<main class="flex-1 px-4 space-y-4 pb-24">
+<!-- Featured Progress Card -->
+<div class="bg-surface-container-lowest rounded-xl p-4 course-card-shadow border border-outline-variant/30 transition-transform active:scale-[0.98]">
+<div class="relative w-full aspect-[16/9] overflow-hidden rounded-lg mb-4">
+<img class="w-full h-full object-cover" data-alt="A clean, modern top-down view of a student's wooden desk featuring a sleek laptop displaying complex network topology diagrams. The workspace is organized with a notebook, a coffee cup, and soft daylight filtering in from a window, creating a focused and academic atmosphere. The aesthetic aligns with a light-mode UI, using soft blues and crisp whites for a professional educational setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4AMoBWp-drTTQgzKSBVRx50sU9FUP16QJyRZYHgWkuUVCBoMYP7oCLnRs9DthK4j9JtDxS_Izfs1DczaW0NYXXwEn8npLICfjnjzYHIpzDpnN8cf2HohpK1ns2_cYpGFSvs9TmWVCeooM8pFn-38HjqslvX3hgb6iN0Ja2Q8U6zr9YpmI2b3Pq-QVTQ3Hw6ztWmyISwAmsC3AKJ3Lria_cpRdifai4wXxbbvQcwx1UaozC0Gtr1rfufoksa8OY5hirXOUavFCnSo"/>
+<div class="absolute top-3 right-3 bg-primary/90 text-on-primary px-3 py-1 rounded-full text-label-lg backdrop-blur-sm">
+                        必修
+                    </div>
+</div>
+<div class="space-y-1">
+<h3 class="text-headline-sm text-on-surface">计算机网络</h3>
+<p class="text-body-md text-on-surface-variant">王教授 · 2023秋季学期</p>
+</div>
+<div class="mt-4 space-y-2">
+<div class="flex justify-between items-center">
+<span class="text-label-lg text-on-surface-variant font-medium">学习进度</span>
+<span class="text-label-lg text-primary font-bold">75%</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-1000" style="width: 75%"></div>
+</div>
+</div>
+<button class="w-full mt-4 h-11 bg-primary text-on-primary rounded-xl font-semibold text-body-md hover:bg-primary-container transition-colors">
+                    继续学习
+                </button>
+</div>
+<!-- Standard Course Card 1 -->
+<div class="flex gap-4 p-4 bg-surface-container-lowest rounded-xl course-card-shadow border border-outline-variant/30 transition-transform active:scale-[0.98]">
+<div class="w-24 h-24 rounded-lg overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="A close-up artistic shot of hand-written mathematical equations on a classic dark green chalkboard. Soft, natural light highlights the chalk textures, suggesting a traditional yet inspiring university lecture hall environment. The color palette maintains cool academic tones with high contrast for legibility, fitting perfectly into a sophisticated learning management interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPkrHWJyBeE6EsfYLPTZSaNYIMsDOrgrQ98XT8Xx6bDBQxBNLF7GJ_y1TE1uTkq8IAUk5SmeGcHW8PIg7jnNEpl8CR4_msLfR6JAFr66YovJsJ3bIgb5Nv7zY_RCwswVeXQdwpVyibxgrrhZ-WnqGKbQeLDAW9ByTdRIbH-vAVRon15YkZll79DCygI_vuijx4CQWMgwA1DxClCbPUgqGSAMNvwfEOKfzjNrY1gm-f_8W3b-5Pij_QDxTz4SFqslEwxsK2bXvrk8g"/>
+</div>
+<div class="flex flex-col justify-between py-1 flex-1">
+<div>
+<h4 class="text-title-lg text-on-surface font-semibold leading-tight">高等数学 (II)</h4>
+<p class="text-label-lg text-on-surface-variant mt-1">张老师 · 128 位学生</p>
+</div>
+<div class="flex items-center gap-2">
+<div class="h-1.5 flex-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 45%"></div>
+</div>
+<span class="text-[10px] font-bold text-secondary">45%</span>
+</div>
+</div>
+</div>
+<!-- Standard Course Card 2 -->
+<div class="flex gap-4 p-4 bg-surface-container-lowest rounded-xl course-card-shadow border border-outline-variant/30 transition-transform active:scale-[0.98]">
+<div class="w-24 h-24 rounded-lg overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="A vibrant, modern digital illustration of abstract code structures and glowing nodes representing software engineering. The scene is set in a contemporary tech lab atmosphere with soft neon accents of blue and teal against a clean white background. This visual communicates innovation and structured learning within a computer science curriculum, maintaining a bright and scholarly mood." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJroXg9bPo8f-8J45u5JtZyDgmkaJWG96WStlR9IE282MxYrxNup07tsWkvxxO4F1sHJZhb_hfzX6ky7N4LmreLYPAz_FmAevtab6eD2VojlKoP6i55tTCYTGURiGgVeV-sfdLrwGGpfNZWrbGz2Y1rYDIF0icQcjL4b12maoGPeWxil71XY1J2eoeG13Oe8D-ZjAH7dxcg--KMUMj7x4lNyO83YVBV01N_VxI6IXTN-xPCkHlHWigFruHI1yYpKhIGAPT0YWxSmY"/>
+</div>
+<div class="flex flex-col justify-between py-1 flex-1">
+<div>
+<h4 class="text-title-lg text-on-surface font-semibold leading-tight">软件工程导论</h4>
+<p class="text-label-lg text-on-surface-variant mt-1">李教授 · 86 位学生</p>
+</div>
+<div class="flex items-center gap-2">
+<div class="h-1.5 flex-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary rounded-full" style="width: 90%"></div>
+</div>
+<span class="text-[10px] font-bold text-tertiary">90%</span>
+</div>
+</div>
+</div>
+<!-- Standard Course Card 3 -->
+<div class="flex gap-4 p-4 bg-surface-container-lowest rounded-xl course-card-shadow border border-outline-variant/30 transition-transform active:scale-[0.98]">
+<div class="w-24 h-24 rounded-lg overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="An abstract visualization of golden neural networks and data streams representing artificial intelligence. The composition is balanced and elegant, featuring a soft-focus background that suggests depth and complexity. The lighting is warm and intellectual, creating an inviting yet professional look that fits the scholarly and reliable brand of the academic platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAD0DKNprv70GG9jvROBTAKLAHXvJypWgc_6PrWyM4ZavbMiNmAdbJ5BRRAZfr4g_2vpIq2UgoULqHA0yCznQRVOvWbGoFyaVpGcDMoD3EuB-4FOIyoEBQSBh_2yxlIu-d4YY6ueL-a7ZINnjWZMgv9KcoiHUB5tI43owITJcW4cc3zcAGuKpxaYEe7VVOkiqeqCJdMOx9heEsChJ_gxHHmPakmHwZaeJ9kD54LOiVOgBac5g-7P1PZ6FH3wdy2NZ60eEutdqXLoOM"/>
+</div>
+<div class="flex flex-col justify-between py-1 flex-1">
+<div>
+<h4 class="text-title-lg text-on-surface font-semibold leading-tight">人工智能基础</h4>
+<p class="text-label-lg text-on-surface-variant mt-1">陈教授 · 210 位学生</p>
+</div>
+<div class="flex items-center gap-2">
+<div class="h-1.5 flex-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 15%"></div>
+</div>
+<span class="text-[10px] font-bold text-primary">15%</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation (Shared Component Integration) -->
+<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md border-t border-outline-variant bg-surface-container-lowest px-4 pb-3 pt-2 z-40">
+<div class="flex justify-between items-center">
+<a class="flex flex-1 flex-col items-center gap-1 rounded-full text-primary" href="#">
+<div class="flex h-8 w-12 items-center justify-center rounded-full bg-primary-fixed" data-icon="House" data-size="24px" data-weight="fill">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+</div>
+<p class="text-[10px] font-bold leading-normal tracking-[0.015em]">首页</p>
+</a>
+<a class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant" href="#">
+<div class="flex h-8 items-center justify-center" data-icon="Compass" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined">explore</span>
+</div>
+<p class="text-[10px] font-medium leading-normal tracking-[0.015em]">发现</p>
+</a>
+<a class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant" href="#">
+<div class="flex h-8 items-center justify-center" data-icon="ChatCircleText" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined">chat_bubble</span>
+</div>
+<p class="text-[10px] font-medium leading-normal tracking-[0.015em]">消息</p>
+</a>
+<a class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant" href="#">
+<div class="flex h-8 items-center justify-center" data-icon="User" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined">person</span>
+</div>
+<p class="text-[10px] font-medium leading-normal tracking-[0.015em]">我的</p>
+</a>
+</div>
+</nav>
+<!-- FAB for New Content -->
+<button class="fixed bottom-24 right-6 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40">
+<span class="material-symbols-outlined" style="font-size: 28px;">add</span>
+</button>
+</div>
+<script>
+        // Simple scroll behavior for the header
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 20) {
+                header.classList.add('shadow-sm');
+                header.classList.remove('bg-surface/80');
+                header.classList.add('bg-surface');
+            } else {
+                header.classList.remove('shadow-sm');
+                header.classList.add('bg-surface/80');
+                header.classList.remove('bg-surface');
+            }
+        });
+
+        // Interactive chip selection
+        const chips = document.querySelectorAll('.no-scrollbar button');
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                chips.forEach(c => {
+                    c.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+                    c.classList.add('bg-surface-container-high', 'text-on-surface-variant');
+                });
+                chip.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+                chip.classList.remove('bg-surface-container-high', 'text-on-surface-variant');
+            });
+        });
+    </script>
+</body></html>
