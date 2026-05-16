@@ -1,6 +1,5 @@
 package com.example.coursemate.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -9,35 +8,45 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = DarkPrimary,
+    secondary = CourseMateSecondary,
+    tertiary = CourseMateTertiary,
+    background = DarkBackground,
+    onBackground = Color(0xFFE1E3E6),
+    surface = DarkSurface,
+    onSurface = Color(0xFFE1E3E6),
+    surfaceVariant = Color(0xFF414751),
+    onSurfaceVariant = Color(0xFFC1C7D3)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+    primary = CourseMatePrimary,
     onPrimary = Color.White,
+    primaryContainer = CourseMatePrimaryContainer,
+    onPrimaryContainer = Color(0xFF001C39),
+    secondary = CourseMateSecondary,
     onSecondary = Color.White,
+    tertiary = CourseMateTertiary,
     onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    background = CourseMateBackground,
+    onBackground = CourseMateOnSurface,
+    surface = CourseMateSurface,
+    onSurface = CourseMateOnSurface,
+    surfaceContainer = CourseMateSurfaceContainer,
+    surfaceVariant = CourseMateSurfaceVariant,
+    onSurfaceVariant = CourseMateOnSurfaceVariant,
+    outline = CourseMateOutline,
+    outlineVariant = CourseMateOutlineVariant
 )
 
 @Composable
 fun CourseMateTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
