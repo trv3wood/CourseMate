@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -158,7 +159,8 @@ fun LoginRegisterScreen(
                     leadingIcon = {
                         Icon(Icons.Outlined.Person, contentDescription = null)
                     },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.testTag("auth_username_field")
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 CourseMateTextField(
@@ -174,7 +176,8 @@ fun LoginRegisterScreen(
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Next
-                    )
+                    ),
+                    modifier = Modifier.testTag("auth_email_field")
                 )
             } else {
                 CourseMateTextField(
@@ -187,7 +190,8 @@ fun LoginRegisterScreen(
                     leadingIcon = {
                         Icon(Icons.Outlined.Mail, contentDescription = null)
                     },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.testTag("auth_username_field")
                 )
             }
 
@@ -222,7 +226,8 @@ fun LoginRegisterScreen(
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
                     imeAction = if (isRegister) ImeAction.Next else ImeAction.Done
-                )
+                ),
+                modifier = Modifier.testTag("auth_password_field")
             )
 
             if (isRegister) {
@@ -241,7 +246,8 @@ fun LoginRegisterScreen(
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
                         imeAction = ImeAction.Done
-                    )
+                    ),
+                    modifier = Modifier.testTag("auth_confirm_password_field")
                 )
             }
 
@@ -280,7 +286,8 @@ fun LoginRegisterScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(56.dp)
+                    .testTag("auth_submit_button"),
                 enabled = !uiState.isLoading,
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -468,6 +475,9 @@ private fun validateAuthInput(
 ): String? {
     if (username.isBlank()) {
         return "请输入用户名"
+    }
+    if (username.length < 3) {
+        return "用户名至少长度为3"
     }
     if (mode == AuthMode.Register && email.isBlank()) {
         return "请输入邮箱"
