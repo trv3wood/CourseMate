@@ -1,0 +1,9 @@
+{
+  "id": 99,
+  "courseId": 10,
+  "title": "Lab 1",
+  "content": "Finish exercises",
+  "deadline": "2026-05-20T23:59:00Z",
+  "status": "open",
+  "createdAt": "2026-05-16T09:00:00Z"
+}

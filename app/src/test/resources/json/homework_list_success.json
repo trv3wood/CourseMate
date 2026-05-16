@@ -1,0 +1,11 @@
+[
+  {
+    "id": 11,
+    "courseId": 10,
+    "title": "Essay",
+    "content": "Write a course reflection",
+    "deadline": "2026-05-20T23:59:00Z",
+    "status": "open",
+    "createdAt": "2026-05-16T08:00:00Z"
+  }
+]

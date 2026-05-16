@@ -1,0 +1,19 @@
+{
+  "id": 7,
+  "courseId": 10,
+  "title": "Need help with recursion",
+  "content": "I do not understand the base case.",
+  "authorId": 1,
+  "solved": false,
+  "createdAt": "2026-05-16T08:00:00Z",
+  "replies": [
+    {
+      "id": 30,
+      "postId": 7,
+      "authorId": 2,
+      "content": "Start by defining the smallest input.",
+      "isAccepted": false,
+      "createdAt": "2026-05-16T08:30:00Z"
+    }
+  ]
+}
