@@ -12,26 +12,25 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Assignment
-import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddComment
+import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Campaign
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Forum
-import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.School
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,8 +41,8 @@ import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,9 +50,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -62,30 +60,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.coursemate.CourseMateApplication
 import com.example.coursemate.model.Course
-import com.example.coursemate.ui.theme.CourseMateTheme
+import com.example.coursemate.model.Homework
+import com.example.coursemate.model.Post
+import com.example.coursemate.model.User
+import com.example.coursemate.utils.formatDateTime
+import com.example.coursemate.utils.formatRelativeTime
+import com.example.coursemate.utils.formatShortDateTime
+import com.example.coursemate.utils.initialsOf
+import com.example.coursemate.utils.parseDateTime
 import com.example.coursemate.viewmodel.CourseUiState
-import com.example.coursemate.viewmodel.CourseViewModel
-import com.example.coursemate.viewmodel.CourseViewModelFactory
-
-private data class CourseCardUiModel(
-    val id: Int,
-    val code: String,
-    val title: String,
-    val teacher: String,
-    val term: String,
-    val description: String,
-    val tag: String,
-    val progress: Float,
-    val accent: CourseAccent
-)
+import java.time.LocalDateTime
 
 private enum class CourseAccent {
     Blue,
@@ -93,375 +81,99 @@ private enum class CourseAccent {
     Teal
 }
 
+private enum class CourseDetailTab(val label: String) {
+    Overview("概览"),
+    Homework("作业"),
+    Discussion("讨论"),
+    Info("信息")
+}
+
+private data class CourseSummaryUiModel(
+    val course: Course,
+    val accent: CourseAccent,
+    val homeworkCount: Int,
+    val openHomeworkCount: Int,
+    val discussionCount: Int,
+    val solvedDiscussionCount: Int,
+    val nextDeadline: String?,
+    val latestDiscussionTitle: String?
+)
+
 @Composable
 fun CourseListRoute(
+    currentUser: User,
+    uiState: CourseUiState,
+    homework: List<Homework>,
+    posts: List<Post>,
+    onRefreshCourses: () -> Unit,
+    onRefreshHomework: () -> Unit,
+    onRefreshPosts: () -> Unit,
+    onCreatePost: (Int, String, String) -> Unit,
+    onNavigateToHomeworkTab: () -> Unit,
+    onNavigateToDiscussionTab: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val appContainer = (LocalContext.current.applicationContext as CourseMateApplication).appContainer
-    val courseViewModel: CourseViewModel = viewModel(
-        factory = CourseViewModelFactory(appContainer.courseRepository)
-    )
-    val uiState by courseViewModel.uiState.collectAsState()
-    val courses = remember(uiState.courses) { uiState.courses.toCourseCards() }
-    var selectedCourseId by rememberSaveable { mutableIntStateOf(NO_SELECTED_COURSE) }
+    val summaries = remember(uiState.courses, homework, posts) {
+        uiState.courses
+            .sortedByDescending { parseDateTime(it.createdAt) }
+            .mapIndexed { index, course ->
+                course.toSummary(
+                    accent = CourseAccent.entries[index % CourseAccent.entries.size],
+                    homework = homework.filter { item -> item.courseId == course.id },
+                    posts = posts.filter { item -> item.courseId == course.id }
+                )
+            }
+    }
+    var selectedCourseId by rememberSaveable { mutableStateOf<Int?>(null) }
+    val selectedCourse = remember(selectedCourseId, summaries) {
+        summaries.firstOrNull { it.course.id == selectedCourseId }
+    }
 
-    val selectedCourse = courses.firstOrNull { it.id == selectedCourseId }
     if (selectedCourse == null) {
         CourseListScreen(
+            currentUser = currentUser,
             uiState = uiState,
-            courses = courses,
-            onCourseClick = { selectedCourseId = it.id },
-            onRefresh = courseViewModel::refreshCourses,
+            courses = summaries,
+            onCourseClick = { selectedCourseId = it.course.id },
+            onRefresh = {
+                onRefreshCourses()
+                onRefreshHomework()
+                onRefreshPosts()
+            },
             modifier = modifier
         )
     } else {
         CourseDetailScreen(
             course = selectedCourse,
-            onBack = { selectedCourseId = NO_SELECTED_COURSE },
+            currentUser = currentUser,
+            homework = homework.filter { it.courseId == selectedCourse.course.id },
+            posts = posts.filter { it.courseId == selectedCourse.course.id },
+            isLoading = uiState.isLoading,
+            errorMessage = uiState.errorMessage,
+            onBack = { selectedCourseId = null },
+            onRefresh = {
+                onRefreshCourses()
+                onRefreshHomework()
+                onRefreshPosts()
+            },
+            onCreatePost = { title, content ->
+                onCreatePost(selectedCourse.course.id, title, content)
+            },
+            onNavigateToHomeworkTab = onNavigateToHomeworkTab,
+            onNavigateToDiscussionTab = onNavigateToDiscussionTab,
             modifier = modifier
-        )
-    }
-}
-
-@Composable
-private fun CourseListScreen(
-    uiState: CourseUiState,
-    courses: List<CourseCardUiModel>,
-    onCourseClick: (CourseCardUiModel) -> Unit,
-    onRefresh: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {},
-                shape = RoundedCornerShape(18.dp),
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = "新增课程")
-            }
-        },
-        bottomBar = {
-            CourseBottomBar(selected = "课程")
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                CourseListHeader(
-                    isLoading = uiState.isLoading,
-                    errorMessage = uiState.errorMessage,
-                    onRefresh = onRefresh
-                )
-            }
-            if (courses.isNotEmpty()) {
-                item {
-                    FeaturedCourseCard(
-                        course = courses.first(),
-                        onClick = { onCourseClick(courses.first()) }
-                    )
-                }
-            }
-            items(courses.drop(1), key = { it.id }) { course ->
-                CompactCourseCard(
-                    course = course,
-                    onClick = { onCourseClick(course) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CourseListHeader(
-    isLoading: Boolean,
-    errorMessage: String?,
-    onRefresh: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(top = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "我的课程",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            IconButton(onClick = onRefresh) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(Icons.Outlined.Search, contentDescription = "搜索课程")
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            FilterChipLike(text = "本学期", selected = true)
-            FilterChipLike(text = "已结课", selected = false)
-            FilterChipLike(text = "收藏", selected = false)
-        }
-        if (errorMessage != null) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = errorMessage,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-}
-
-@Composable
-private fun FilterChipLike(
-    text: String,
-    selected: Boolean
-) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
-        },
-        contentColor = if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        }
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-private fun FeaturedCourseCard(
-    course: CourseCardUiModel,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            CourseVisual(
-                course = course,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = course.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${course.teacher} · ${course.term}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                CourseTag(text = course.tag)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            CourseProgress(progress = course.progress, accent = course.accent)
-            Spacer(modifier = Modifier.height(14.dp))
-            Button(
-                onClick = onClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("进入课程")
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompactCourseCard(
-    course: CourseCardUiModel,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            CourseVisual(
-                course = course,
-                modifier = Modifier.size(96.dp)
-            )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(96.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        text = course.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${course.teacher} · ${course.term}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                CourseProgress(progress = course.progress, accent = course.accent, compact = true)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CourseVisual(
-    course: CourseCardUiModel,
-    modifier: Modifier = Modifier
-) {
-    val colors = when (course.accent) {
-        CourseAccent.Blue -> listOf(Color(0xFFD4E3FF), Color(0xFF7FB6F0))
-        CourseAccent.Indigo -> listOf(Color(0xFFDEE0FF), Color(0xFF96A5FF))
-        CourseAccent.Teal -> listOf(Color(0xFF8EF4E9), Color(0xFF3AAFA7))
-    }
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Brush.linearGradient(colors)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.School,
-            contentDescription = null,
-            modifier = Modifier.size(42.dp),
-            tint = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-        Text(
-            text = course.code,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(10.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.88f))
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-            color = MaterialTheme.colorScheme.onPrimary,
-            style = MaterialTheme.typography.labelLarge
-        )
-    }
-}
-
-@Composable
-private fun CourseTag(text: String) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-private fun CourseProgress(
-    progress: Float,
-    accent: CourseAccent,
-    compact: Boolean = false
-) {
-    val color = when (accent) {
-        CourseAccent.Blue -> MaterialTheme.colorScheme.primary
-        CourseAccent.Indigo -> MaterialTheme.colorScheme.secondary
-        CourseAccent.Teal -> MaterialTheme.colorScheme.tertiary
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (!compact) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "学习进度",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "${(progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = color
-                )
-            }
-        }
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (compact) 6.dp else 8.dp)
-                .clip(RoundedCornerShape(999.dp)),
-            color = color,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CourseDetailScreen(
-    course: CourseCardUiModel,
-    onBack: () -> Unit,
+private fun CourseListScreen(
+    currentUser: User,
+    uiState: CourseUiState,
+    courses: List<CourseSummaryUiModel>,
+    onCourseClick: (CourseSummaryUiModel) -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -470,37 +182,35 @@ private fun CourseDetailScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "CourseMate",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回课程列表")
+                    Column {
+                        Text(
+                            text = "CourseMate",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "课程中心",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
                 actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Outlined.Search, contentDescription = "搜索课程内容")
+                    IconButton(onClick = onRefresh) {
+                        if (uiState.isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Refresh, contentDescription = "刷新课程")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer
                 )
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {},
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Icon(Icons.Outlined.Forum, contentDescription = "新讨论")
-            }
-        },
-        bottomBar = {
-            CourseBottomBar(selected = "课程")
         }
     ) { innerPadding ->
         LazyColumn(
@@ -511,111 +221,526 @@ private fun CourseDetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                CourseHero(course = course)
-            }
-            item {
-                DetailTabs()
-            }
-            item {
-                AnnouncementCard()
-            }
-            item {
-                UpdateCard(
-                    icon = Icons.Outlined.Description,
-                    title = "新课件上传：${course.title} 课程资料",
-                    body = "本周资料已更新，可在课件模块查看。",
-                    action = "查看课件"
+                WelcomeCard(
+                    currentUser = currentUser,
+                    courseCount = courses.size,
+                    openHomeworkCount = courses.sumOf { it.openHomeworkCount }
                 )
             }
+            if (uiState.errorMessage != null) {
+                item {
+                    InlineMessageCard(
+                        title = "同步失败",
+                        message = uiState.errorMessage
+                    )
+                }
+            }
+            if (uiState.isLoading && courses.isEmpty()) {
+                item {
+                    LoadingPlaceholder(text = "正在加载课程与课程动态")
+                }
+            } else if (courses.isEmpty()) {
+                item {
+                    EmptyStateCard(
+                        title = "还没有课程",
+                        message = "后端目前没有返回课程数据，稍后刷新或先在后台创建课程。"
+                    )
+                }
+            } else {
+                item {
+                    FeaturedCourseCard(
+                        course = courses.first(),
+                        onClick = { onCourseClick(courses.first()) }
+                    )
+                }
+                items(courses.drop(1), key = { it.course.id }) { course ->
+                    CompactCourseCard(
+                        course = course,
+                        onClick = { onCourseClick(course) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CourseDetailScreen(
+    course: CourseSummaryUiModel,
+    currentUser: User,
+    homework: List<Homework>,
+    posts: List<Post>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+    onCreatePost: (String, String) -> Unit,
+    onNavigateToHomeworkTab: () -> Unit,
+    onNavigateToDiscussionTab: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var selectedTab by rememberSaveable(course.course.id) {
+        mutableStateOf(CourseDetailTab.Overview)
+    }
+    var showComposer by rememberSaveable(course.course.id) { mutableStateOf(false) }
+
+    if (showComposer) {
+        CreatePostDialog(
+            courseName = course.course.name,
+            onDismiss = { showComposer = false },
+            onConfirm = { title, content ->
+                onCreatePost(title, content)
+                showComposer = false
+                selectedTab = CourseDetailTab.Discussion
+            }
+        )
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            text = course.course.name,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = course.course.teacherName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回课程列表")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onRefresh) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Refresh, contentDescription = "刷新课程详情")
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showComposer = true },
+                shape = RoundedCornerShape(18.dp),
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+            ) {
+                Icon(Icons.Outlined.AddComment, contentDescription = "新建讨论")
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             item {
-                UpdateCard(
-                    icon = Icons.AutoMirrored.Outlined.Assignment,
-                    title = "作业提醒",
-                    body = "请关注课程作业的截止时间，按时完成提交。",
-                    action = "查看作业"
+                CourseHero(
+                    course = course,
+                    currentUser = currentUser,
+                    onOpenHomework = {
+                        selectedTab = CourseDetailTab.Homework
+                    },
+                    onOpenDiscussion = {
+                        selectedTab = CourseDetailTab.Discussion
+                    }
                 )
             }
+            if (errorMessage != null) {
+                item {
+                    InlineMessageCard(
+                        title = "同步失败",
+                        message = errorMessage
+                    )
+                }
+            }
             item {
-                SyllabusCard()
+                CourseDetailTabs(
+                    selectedTab = selectedTab,
+                    onSelect = { selectedTab = it }
+                )
+            }
+            when (selectedTab) {
+                CourseDetailTab.Overview -> {
+                    if (homework.isNotEmpty()) {
+                        item {
+                            HomeworkHighlightCard(
+                                homework = homework.sortedBy { parseDateTime(it.deadline) }.first(),
+                                onOpenHomeworkTab = onNavigateToHomeworkTab
+                            )
+                        }
+                    }
+                    if (posts.isNotEmpty()) {
+                        item {
+                            DiscussionHighlightCard(
+                                post = posts.sortedByDescending { parseDateTime(it.createdAt) }.first(),
+                                onOpenDiscussionTab = onNavigateToDiscussionTab
+                            )
+                        }
+                    }
+                    if (homework.isEmpty() && posts.isEmpty()) {
+                        item {
+                            EmptyStateCard(
+                                title = "这门课还很安静",
+                                message = "目前没有作业和讨论，可以用右下角按钮发起第一条讨论。"
+                            )
+                        }
+                    }
+                    item {
+                        OverviewInfoCard(course = course)
+                    }
+                }
+
+                CourseDetailTab.Homework -> {
+                    if (homework.isEmpty()) {
+                        item {
+                            EmptyStateCard(
+                                title = "暂无作业",
+                                message = "这门课还没有布置作业。"
+                            )
+                        }
+                    } else {
+                        items(
+                            homework.sortedBy { parseDateTime(it.deadline) },
+                            key = { it.id }
+                        ) { item ->
+                            HomeworkSummaryCard(
+                                homework = item,
+                                onOpenHomeworkTab = onNavigateToHomeworkTab
+                            )
+                        }
+                    }
+                }
+
+                CourseDetailTab.Discussion -> {
+                    if (posts.isEmpty()) {
+                        item {
+                            EmptyStateCard(
+                                title = "暂无讨论",
+                                message = "同学和老师还没有发起话题，你可以先提一个问题。"
+                            )
+                        }
+                    } else {
+                        items(
+                            posts.sortedByDescending { parseDateTime(it.createdAt) },
+                            key = { it.id }
+                        ) { item ->
+                            DiscussionSummaryCard(
+                                post = item,
+                                onOpenDiscussionTab = onNavigateToDiscussionTab
+                            )
+                        }
+                    }
+                }
+
+                CourseDetailTab.Info -> {
+                    item {
+                        DetailInfoCard(course = course)
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CourseHero(course: CourseCardUiModel) {
+private fun WelcomeCard(
+    currentUser: User,
+    courseCount: Int,
+    openHomeworkCount: Int
+) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "你好，${currentUser.username}",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "当前已同步 $courseCount 门课程，还有 $openHomeworkCount 项待处理作业。",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricChip(
+                    icon = Icons.Outlined.Person,
+                    text = currentUser.role.uppercase()
+                )
+                MetricChip(
+                    icon = Icons.Outlined.Schedule,
+                    text = "实时同步"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeaturedCourseCard(
+    course: CourseSummaryUiModel,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             CourseVisual(
-                course = course,
+                courseName = course.course.name,
+                teacherName = course.course.teacherName,
+                accent = course.accent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = course.course.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = course.course.description.orEmpty().ifBlank { "暂无课程简介" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricChip(
+                    icon = Icons.Outlined.Assignment,
+                    text = "${course.homeworkCount} 个作业"
+                )
+                MetricChip(
+                    icon = Icons.Outlined.Forum,
+                    text = "${course.discussionCount} 条讨论"
+                )
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetaRow(
+                    label = "教师",
+                    value = course.course.teacherName
+                )
+                MetaRow(
+                    label = "最近截止",
+                    value = course.nextDeadline?.let(::formatShortDateTime) ?: "暂无"
+                )
+                MetaRow(
+                    label = "最新讨论",
+                    value = course.latestDiscussionTitle ?: "还没有讨论"
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("查看课程")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactCourseCard(
+    course: CourseSummaryUiModel,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            CourseVisual(
+                courseName = course.course.name,
+                teacherName = course.course.teacherName,
+                accent = course.accent,
+                modifier = Modifier.size(92.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = course.course.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = course.course.teacherName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MetricChip(
+                        icon = Icons.Outlined.Assignment,
+                        text = "${course.homeworkCount}"
+                    )
+                    MetricChip(
+                        icon = Icons.Outlined.Forum,
+                        text = "${course.discussionCount}"
+                    )
+                    MetricChip(
+                        icon = Icons.Outlined.Campaign,
+                        text = "${course.solvedDiscussionCount} 已解决"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseHero(
+    course: CourseSummaryUiModel,
+    currentUser: User,
+    onOpenHomework: () -> Unit,
+    onOpenDiscussion: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            CourseVisual(
+                courseName = course.course.name,
+                teacherName = course.course.teacherName,
+                accent = course.accent,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
             )
             Spacer(modifier = Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CourseTag(text = course.code)
-                CourseTag(text = course.tag)
+                MetricChip(
+                    icon = Icons.Outlined.Person,
+                    text = course.course.teacherName
+                )
+                MetricChip(
+                    icon = Icons.Outlined.CalendarMonth,
+                    text = formatDateTime(course.course.createdAt)
+                )
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = course.title,
+                text = course.course.name,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = course.description,
-                style = MaterialTheme.typography.bodyMedium,
+                text = course.course.description.orEmpty().ifBlank { "暂无课程简介。" },
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                text = "${course.teacher} · ${course.term}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
-            )
             Spacer(modifier = Modifier.height(16.dp))
-            CourseProgress(progress = course.progress, accent = course.accent)
-            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricChip(
+                    icon = Icons.Outlined.Assignment,
+                    text = "${course.homeworkCount} 个作业"
+                )
+                MetricChip(
+                    icon = Icons.Outlined.Forum,
+                    text = "${course.discussionCount} 条讨论"
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
-                    onClick = {},
+                    onClick = onOpenDiscussion,
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("进入讨论")
                 }
                 TextButton(
-                    onClick = {},
+                    onClick = onOpenHomework,
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("查看进度")
+                    Text("查看作业")
                 }
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "当前登录：${currentUser.username}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
 
 @Composable
-private fun DetailTabs() {
+private fun CourseDetailTabs(
+    selectedTab: CourseDetailTab,
+    onSelect: (CourseDetailTab) -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(24.dp)
+        horizontalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        listOf("动态", "课件", "作业", "成员").forEachIndexed { index, text ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        CourseDetailTab.entries.forEach { tab ->
+            val selected = tab == selectedTab
+            Column(
+                modifier = Modifier.clickable { onSelect(tab) },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
-                    text = text,
+                    text = tab.label,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (index == 0) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (index == 0) {
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) {
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -624,11 +749,11 @@ private fun DetailTabs() {
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
-                        .width(28.dp)
+                        .width(24.dp)
                         .height(3.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(
-                            if (index == 0) MaterialTheme.colorScheme.primary else Color.Transparent
+                            if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
                         )
                 )
             }
@@ -637,9 +762,12 @@ private fun DetailTabs() {
 }
 
 @Composable
-private fun AnnouncementCard() {
+private fun HomeworkHighlightCard(
+    homework: Homework,
+    onOpenHomeworkTab: () -> Unit
+) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
@@ -652,136 +780,463 @@ private fun AnnouncementCard() {
                     .background(MaterialTheme.colorScheme.error)
             )
             Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.Campaign,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "课程重要公告",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "本周课程安排已更新，请同学们课前查看资料并完成预习。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "2小时前 · 教师发布",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun UpdateCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    body: String,
-    action: String
-) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
+                    text = "最近截止作业",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = body,
+                    text = homework.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = homework.content,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = action,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
+                    text = "截止：${formatShortDateTime(homework.deadline)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
                 )
+                TextButton(
+                    onClick = onOpenHomeworkTab,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("前往作业中心")
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SyllabusCard() {
+private fun DiscussionHighlightCard(
+    post: Post,
+    onOpenDiscussionTab: () -> Unit
+) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "最新讨论",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                StatusPill(
+                    text = if (post.solved) "已解决" else "讨论中",
+                    tone = if (post.solved) PillTone.Success else PillTone.Info
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = post.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = post.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatRelativeTime(post.createdAt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(onClick = onOpenDiscussionTab) {
+                    Icon(
+                        imageVector = Icons.Outlined.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("打开讨论")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverviewInfoCard(course: CourseSummaryUiModel) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Text(
-                text = "教学大纲",
+                text = "课程概况",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            SyllabusRow(done = true, title = "第1周：课程基础", subtitle = "已完成")
-            SyllabusRow(done = true, title = "第2周：核心概念", subtitle = "进行中")
-            SyllabusRow(done = false, title = "第3周：综合实践", subtitle = "尚未开始")
+            MetaRow(label = "课程 ID", value = course.course.id.toString())
+            MetaRow(label = "创建时间", value = formatDateTime(course.course.createdAt))
+            MetaRow(label = "已解决讨论", value = "${course.solvedDiscussionCount} 条")
+            MetaRow(label = "未完成作业", value = "${course.openHomeworkCount} 项")
         }
     }
 }
 
 @Composable
-private fun SyllabusRow(
-    done: Boolean,
-    title: String,
-    subtitle: String
+private fun HomeworkSummaryCard(
+    homework: Homework,
+    onOpenHomeworkTab: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.padding(bottom = 14.dp),
-        verticalAlignment = Alignment.Top
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Icon(
-            imageVector = if (done) Icons.Outlined.CheckCircle else Icons.Outlined.School,
-            contentDescription = null,
-            tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Column {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = homework.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                StatusPill(
+                    text = homework.status,
+                    tone = if (homework.status.equals("submitted", ignoreCase = true)) {
+                        PillTone.Success
+                    } else {
+                        PillTone.Warning
+                    }
+                )
+            }
             Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                text = homework.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = subtitle,
+                text = "截止：${formatShortDateTime(homework.deadline)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                onClick = onOpenHomeworkTab,
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text("在作业中心查看")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscussionSummaryCard(
+    post: Post,
+    onOpenDiscussionTab: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = post.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                StatusPill(
+                    text = if (post.solved) "已解决" else "待解答",
+                    tone = if (post.solved) PillTone.Success else PillTone.Info
+                )
+            }
+            Text(
+                text = post.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatRelativeTime(post.createdAt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(onClick = onOpenDiscussionTab) {
+                    Text("进入讨论中心")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailInfoCard(course: CourseSummaryUiModel) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "课程信息",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            MetaRow(label = "课程名称", value = course.course.name)
+            MetaRow(label = "任课教师", value = course.course.teacherName)
+            MetaRow(label = "课程 ID", value = course.course.id.toString())
+            MetaRow(label = "创建时间", value = formatDateTime(course.course.createdAt))
+            MetaRow(label = "课程简介", value = course.course.description.orEmpty().ifBlank { "暂无" })
+        }
+    }
+}
+
+@Composable
+private fun CourseVisual(
+    courseName: String,
+    teacherName: String,
+    accent: CourseAccent,
+    modifier: Modifier = Modifier
+) {
+    val colors = when (accent) {
+        CourseAccent.Blue -> listOf(Color(0xFFD4E3FF), Color(0xFF78AEE6))
+        CourseAccent.Indigo -> listOf(Color(0xFFDEE0FF), Color(0xFF98A6F8))
+        CourseAccent.Teal -> listOf(Color(0xFF8EF4E9), Color(0xFF4CB8AE))
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.linearGradient(colors))
+            .padding(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.align(Alignment.BottomStart),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.14f)
+            ) {
+                Text(
+                    text = initialsOf(courseName),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Text(
+                text = courseName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+            Text(
+                text = teacherName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.88f)
+            )
+        }
+        Icon(
+            imageVector = Icons.Outlined.School,
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(42.dp),
+            tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.92f)
+        )
+    }
+}
+
+@Composable
+private fun MetaRow(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun MetricChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+private enum class PillTone {
+    Info,
+    Success,
+    Warning
+}
+
+@Composable
+private fun StatusPill(
+    text: String,
+    tone: PillTone
+) {
+    val colors = when (tone) {
+        PillTone.Info -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        PillTone.Success -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f) to MaterialTheme.colorScheme.tertiary
+        PillTone.Warning -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f) to MaterialTheme.colorScheme.error
+    }
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = colors.first,
+        contentColor = colors.second
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+private fun InlineMessageCard(
+    title: String,
+    message: String
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyStateCard(
+    title: String,
+    message: String
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.School,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = message,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -790,153 +1245,98 @@ private fun SyllabusRow(
 }
 
 @Composable
-private fun CourseBottomBar(selected: String) {
-    Surface(
-        tonalElevation = 2.dp,
-        shadowElevation = 2.dp,
-        color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxWidth()
+private fun LoadingPlaceholder(text: String) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceAround
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            BottomItem(icon = Icons.Outlined.Home, label = "首页", selected = selected == "首页")
-            BottomItem(icon = Icons.Outlined.School, label = "课程", selected = selected == "课程")
-            BottomItem(icon = Icons.Outlined.Forum, label = "讨论", selected = selected == "讨论")
-            BottomItem(icon = Icons.Outlined.Person, label = "个人", selected = selected == "个人")
+            CircularProgressIndicator()
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 @Composable
-private fun BottomItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    selected: Boolean
+private fun CreatePostDialog(
+    courseName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            modifier = Modifier.size(22.dp)
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+    var title by rememberSaveable { mutableStateOf("") }
+    var content by rememberSaveable { mutableStateOf("") }
+    val isValid = title.isNotBlank() && content.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("发起课程讨论") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "课程：$courseName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("标题") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("内容") },
+                    minLines = 4
+                )
             }
-        )
-    }
-}
-
-private fun List<Course>.toCourseCards(): List<CourseCardUiModel> {
-    if (isEmpty()) {
-        return sampleCourses
-    }
-    val accents = listOf(CourseAccent.Blue, CourseAccent.Indigo, CourseAccent.Teal)
-    val progress = listOf(0.75f, 0.45f, 0.9f, 0.15f)
-    return mapIndexed { index, course ->
-        CourseCardUiModel(
-            id = course.id,
-            code = "C${course.id.toString().padStart(3, '0')}",
-            title = course.name,
-            teacher = course.teacherName,
-            term = "本学期",
-            description = course.description ?: "课程资料、作业和讨论将在这里集中呈现。",
-            tag = if (index % 2 == 0) "必修" else "选修",
-            progress = progress[index % progress.size],
-            accent = accents[index % accents.size]
-        )
-    }
-}
-
-private val sampleCourses = listOf(
-    CourseCardUiModel(
-        id = -1,
-        code = "CS301",
-        title = "计算机网络",
-        teacher = "王教授",
-        term = "2026春季学期",
-        description = "围绕网络体系结构、路由协议和应用层协议展开，配合实验理解真实网络系统。",
-        tag = "必修",
-        progress = 0.75f,
-        accent = CourseAccent.Blue
-    ),
-    CourseCardUiModel(
-        id = -2,
-        code = "MA202",
-        title = "高等数学 (II)",
-        teacher = "张老师",
-        term = "2026春季学期",
-        description = "覆盖多元函数、级数与常微分方程，为后续专业课程建立数学基础。",
-        tag = "基础课",
-        progress = 0.45f,
-        accent = CourseAccent.Indigo
-    ),
-    CourseCardUiModel(
-        id = -3,
-        code = "SE101",
-        title = "软件工程导论",
-        teacher = "李教授",
-        term = "2026春季学期",
-        description = "学习软件生命周期、需求分析、协作开发与工程实践。",
-        tag = "项目课",
-        progress = 0.9f,
-        accent = CourseAccent.Teal
-    ),
-    CourseCardUiModel(
-        id = -4,
-        code = "AI100",
-        title = "人工智能基础",
-        teacher = "陈教授",
-        term = "2026春季学期",
-        description = "介绍搜索、机器学习基础和智能系统应用。",
-        tag = "选修",
-        progress = 0.15f,
-        accent = CourseAccent.Blue
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(title.trim(), content.trim()) },
+                enabled = isValid
+            ) {
+                Text("发布")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
     )
-)
-
-private const val NO_SELECTED_COURSE = Int.MIN_VALUE
-
-@Preview(showBackground = true, widthDp = 390, heightDp = 884)
-@Composable
-private fun CourseListScreenPreview() {
-    CourseMateTheme {
-        CourseListScreen(
-            uiState = CourseUiState(),
-            courses = sampleCourses,
-            onCourseClick = {},
-            onRefresh = {}
-        )
-    }
 }
 
-@Preview(showBackground = true, widthDp = 390, heightDp = 884)
-@Composable
-private fun CourseDetailScreenPreview() {
-    CourseMateTheme {
-        CourseDetailScreen(
-            course = sampleCourses.first(),
-            onBack = {}
-        )
-    }
+private fun Course.toSummary(
+    accent: CourseAccent,
+    homework: List<Homework>,
+    posts: List<Post>
+): CourseSummaryUiModel {
+    val nextDeadline = homework
+        .mapNotNull { item -> item.deadline }
+        .minByOrNull { value -> parseDateTime(value) ?: LocalDateTime.MAX }
+    val latestPost = posts.maxByOrNull { post -> parseDateTime(post.createdAt) ?: LocalDateTime.MIN }
+
+    return CourseSummaryUiModel(
+        course = this,
+        accent = accent,
+        homeworkCount = homework.size,
+        openHomeworkCount = homework.count { !it.status.equals("submitted", ignoreCase = true) },
+        discussionCount = posts.size,
+        solvedDiscussionCount = posts.count { it.solved },
+        nextDeadline = nextDeadline,
+        latestDiscussionTitle = latestPost?.title
+    )
 }

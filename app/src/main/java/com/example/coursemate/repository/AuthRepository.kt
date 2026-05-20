@@ -35,7 +35,7 @@ class AuthRepository(
         password: String,
         role: String = "student"
     ): AppResult<User> = safeCall {
-        val user = authApi.register(
+        authApi.register(
             RegisterRequestDto(
                 username = username,
                 email = email,
@@ -43,6 +43,9 @@ class AuthRepository(
                 role = role
             )
         )
+        val token = authApi.login(LoginRequestDto(username = username, password = password))
+        tokenDataStore.saveToken(token.accessToken)
+        val user = userApi.currentUser()
         userDao.upsert(user.toEntity())
         user.toEntity().toModel()
     }

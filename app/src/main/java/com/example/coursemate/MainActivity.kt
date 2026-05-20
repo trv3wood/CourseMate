@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.example.coursemate.ui.course.CourseListRoute
+import com.example.coursemate.ui.app.CourseMateApp
 import com.example.coursemate.ui.theme.CourseMateTheme
 
 class MainActivity : ComponentActivity() {
@@ -13,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CourseMateTheme {
-                CourseListRoute()
+                CourseMateApp()
             }
         }
     }
