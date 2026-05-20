@@ -126,7 +126,12 @@ class HomeworkViewModel(
         }
     }
 
-    fun submitHomework(homeworkId: Int, content: String, attachmentUrl: String?) {
+    fun submitHomework(
+        homeworkId: Int,
+        content: String,
+        attachmentUrl: String?,
+        refreshSubmissionList: Boolean = false
+    ) {
         viewModelScope.launch {
             operationState.value = OperationUiState(isLoading = true)
             operationState.value = when (
@@ -134,7 +139,9 @@ class HomeworkViewModel(
             ) {
                 is AppResult.Success -> {
                     refreshMySubmissionsInternal()
-                    loadHomeworkSubmissions(homeworkId)
+                    if (refreshSubmissionList) {
+                        loadHomeworkSubmissions(homeworkId)
+                    }
                     OperationUiState()
                 }
                 is AppResult.Error -> OperationUiState(errorMessage = result.message)

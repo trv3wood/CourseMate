@@ -47,6 +47,7 @@ import com.example.coursemate.ui.discussion.DiscussionRoute
 import com.example.coursemate.ui.homework.HomeworkRoute
 import com.example.coursemate.ui.login.LoginRegisterScreen
 import com.example.coursemate.ui.profile.ProfileRoute
+import com.example.coursemate.utils.canViewHomeworkSubmissions
 import com.example.coursemate.viewmodel.AuthViewModel
 import com.example.coursemate.viewmodel.CourseViewModel
 import com.example.coursemate.viewmodel.DiscussionViewModel
@@ -192,7 +193,14 @@ private fun AuthenticatedHomeRoute(
                     onCreateHomework = homeworkViewModel::createHomework,
                     onUpdateHomework = homeworkViewModel::updateHomework,
                     onDeleteHomework = homeworkViewModel::deleteHomework,
-                    onSubmitHomework = homeworkViewModel::submitHomework,
+                    onSubmitHomework = { homeworkId, content, attachmentUrl ->
+                        homeworkViewModel.submitHomework(
+                            homeworkId = homeworkId,
+                            content = content,
+                            attachmentUrl = attachmentUrl,
+                            refreshSubmissionList = currentUser.canViewHomeworkSubmissions()
+                        )
+                    },
                     onLoadHomeworkSubmissions = homeworkViewModel::loadHomeworkSubmissions,
                     modifier = Modifier.padding(innerPadding)
                 )
