@@ -9,7 +9,9 @@ import com.example.coursemate.model.PostDetail
 import com.example.coursemate.model.Reply
 import com.example.coursemate.network.api.PostApi
 import com.example.coursemate.network.dto.PostCreateDto
+import com.example.coursemate.network.dto.PostUpdateDto
 import com.example.coursemate.network.dto.ReplyCreateDto
+import com.example.coursemate.network.dto.ReplyUpdateDto
 import com.example.coursemate.utils.AppResult
 import com.example.coursemate.utils.safeCall
 import kotlinx.coroutines.flow.Flow
@@ -75,6 +77,35 @@ class PostRepository(
         post.toEntity().toModel()
     }
 
+    suspend fun updatePost(
+        postId: Int,
+        title: String? = null,
+        content: String? = null,
+        solved: Boolean? = null
+    ): AppResult<Post> = safeCall {
+        val post = postApi.updatePost(
+            postId = postId,
+            request = PostUpdateDto(
+                title = title,
+                content = content,
+                solved = solved
+            )
+        )
+        postDao.upsert(post.toEntity())
+        post.toEntity().toModel()
+    }
+
+    suspend fun deletePost(postId: Int): AppResult<Unit> = safeCall {
+        val response = postApi.deletePost(postId)
+        if (!response.isSuccessful) {
+            error("Delete post failed with HTTP ${response.code()}")
+        }
+        database.withTransaction {
+            replyDao.deleteForPost(postId)
+            postDao.deleteById(postId)
+        }
+    }
+
     suspend fun replyToPost(postId: Int, content: String): AppResult<Reply> = safeCall {
         val reply = postApi.replyToPost(
             postId = postId,
@@ -82,6 +113,23 @@ class PostRepository(
         )
         replyDao.upsert(reply.toEntity())
         reply.toEntity().toModel()
+    }
+
+    suspend fun updateReply(replyId: Int, content: String): AppResult<Reply> = safeCall {
+        val reply = postApi.updateReply(
+            replyId = replyId,
+            request = ReplyUpdateDto(content = content)
+        )
+        replyDao.upsert(reply.toEntity())
+        reply.toEntity().toModel()
+    }
+
+    suspend fun deleteReply(replyId: Int): AppResult<Unit> = safeCall {
+        val response = postApi.deleteReply(replyId)
+        if (!response.isSuccessful) {
+            error("Delete reply failed with HTTP ${response.code()}")
+        }
+        replyDao.deleteById(replyId)
     }
 
     suspend fun acceptReply(replyId: Int): AppResult<Reply> = safeCall {

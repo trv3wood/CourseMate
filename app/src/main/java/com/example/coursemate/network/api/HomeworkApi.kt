@@ -2,6 +2,8 @@ package com.example.coursemate.network.api
 
 import com.example.coursemate.network.dto.HomeworkCreateDto
 import com.example.coursemate.network.dto.HomeworkReadDto
+import com.example.coursemate.network.dto.HomeworkSubmissionCreateDto
+import com.example.coursemate.network.dto.HomeworkSubmissionReadDto
 import com.example.coursemate.network.dto.HomeworkUpdateDto
 import retrofit2.Response
 import retrofit2.http.Body
@@ -33,4 +35,23 @@ interface HomeworkApi {
 
     @DELETE("homework/{homework_id}")
     suspend fun deleteHomework(@Path("homework_id") homeworkId: Int): Response<Unit>
+
+    @POST("homework/{homework_id}/submissions")
+    suspend fun submitHomework(
+        @Path("homework_id") homeworkId: Int,
+        @Body request: HomeworkSubmissionCreateDto
+    ): HomeworkSubmissionReadDto
+
+    @GET("homework/{homework_id}/submissions")
+    suspend fun listHomeworkSubmissions(
+        @Path("homework_id") homeworkId: Int,
+        @Query("skip") skip: Int = 0,
+        @Query("limit") limit: Int = 20
+    ): List<HomeworkSubmissionReadDto>
+
+    @GET("homework/submissions/me")
+    suspend fun listMySubmissions(
+        @Query("skip") skip: Int = 0,
+        @Query("limit") limit: Int = 20
+    ): List<HomeworkSubmissionReadDto>
 }

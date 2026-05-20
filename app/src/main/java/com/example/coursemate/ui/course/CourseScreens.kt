@@ -20,10 +20,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Person
@@ -67,6 +70,7 @@ import com.example.coursemate.model.Course
 import com.example.coursemate.model.Homework
 import com.example.coursemate.model.Post
 import com.example.coursemate.model.User
+import com.example.coursemate.utils.canManageCourses
 import com.example.coursemate.utils.formatDateTime
 import com.example.coursemate.utils.formatRelativeTime
 import com.example.coursemate.utils.formatShortDateTime
@@ -108,6 +112,9 @@ fun CourseListRoute(
     onRefreshCourses: () -> Unit,
     onRefreshHomework: () -> Unit,
     onRefreshPosts: () -> Unit,
+    onCreateCourse: (String, String?, String) -> Unit,
+    onUpdateCourse: (Int, String?, String?, String?) -> Unit,
+    onDeleteCourse: (Int) -> Unit,
     onCreatePost: (Int, String, String) -> Unit,
     onNavigateToHomeworkTab: () -> Unit,
     onNavigateToDiscussionTab: () -> Unit,
@@ -140,6 +147,7 @@ fun CourseListRoute(
                 onRefreshHomework()
                 onRefreshPosts()
             },
+            onCreateCourse = onCreateCourse,
             modifier = modifier
         )
     } else {
@@ -155,6 +163,13 @@ fun CourseListRoute(
                 onRefreshCourses()
                 onRefreshHomework()
                 onRefreshPosts()
+            },
+            onUpdateCourse = { name, description, teacherName ->
+                onUpdateCourse(selectedCourse.course.id, name, description, teacherName)
+            },
+            onDeleteCourse = {
+                onDeleteCourse(selectedCourse.course.id)
+                selectedCourseId = null
             },
             onCreatePost = { title, content ->
                 onCreatePost(selectedCourse.course.id, title, content)
@@ -174,11 +189,36 @@ private fun CourseListScreen(
     courses: List<CourseSummaryUiModel>,
     onCourseClick: (CourseSummaryUiModel) -> Unit,
     onRefresh: () -> Unit,
+    onCreateCourse: (String, String?, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showCreateDialog) {
+        CourseEditorDialog(
+            title = "创建课程",
+            onDismiss = { showCreateDialog = false },
+            onConfirm = { name, description, teacherName ->
+                onCreateCourse(name, description, teacherName)
+                showCreateDialog = false
+            }
+        )
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
+        floatingActionButton = {
+            if (currentUser.canManageCourses()) {
+                FloatingActionButton(
+                    onClick = { showCreateDialog = true },
+                    shape = RoundedCornerShape(18.dp),
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+                ) {
+                    Icon(Icons.Outlined.Add, contentDescription = "创建课程")
+                }
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -275,6 +315,8 @@ private fun CourseDetailScreen(
     errorMessage: String?,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
+    onUpdateCourse: (String?, String?, String?) -> Unit,
+    onDeleteCourse: () -> Unit,
     onCreatePost: (String, String) -> Unit,
     onNavigateToHomeworkTab: () -> Unit,
     onNavigateToDiscussionTab: () -> Unit,
@@ -284,6 +326,8 @@ private fun CourseDetailScreen(
         mutableStateOf(CourseDetailTab.Overview)
     }
     var showComposer by rememberSaveable(course.course.id) { mutableStateOf(false) }
+    var showEditCourseDialog by rememberSaveable(course.course.id) { mutableStateOf(false) }
+    var showDeleteCourseDialog by rememberSaveable(course.course.id) { mutableStateOf(false) }
 
     if (showComposer) {
         CreatePostDialog(
@@ -293,6 +337,29 @@ private fun CourseDetailScreen(
                 onCreatePost(title, content)
                 showComposer = false
                 selectedTab = CourseDetailTab.Discussion
+            }
+        )
+    }
+
+    if (showEditCourseDialog) {
+        CourseEditorDialog(
+            title = "编辑课程",
+            initialCourse = course.course,
+            onDismiss = { showEditCourseDialog = false },
+            onConfirm = { name, description, teacherName ->
+                onUpdateCourse(name, description, teacherName)
+                showEditCourseDialog = false
+            }
+        )
+    }
+
+    if (showDeleteCourseDialog) {
+        ConfirmCourseDeleteDialog(
+            courseName = course.course.name,
+            onDismiss = { showDeleteCourseDialog = false },
+            onConfirm = {
+                showDeleteCourseDialog = false
+                onDeleteCourse()
             }
         )
     }
@@ -359,6 +426,8 @@ private fun CourseDetailScreen(
                 CourseHero(
                     course = course,
                     currentUser = currentUser,
+                    onEditCourse = { showEditCourseDialog = true },
+                    onDeleteCourse = { showDeleteCourseDialog = true },
                     onOpenHomework = {
                         selectedTab = CourseDetailTab.Homework
                     },
@@ -643,6 +712,8 @@ private fun CompactCourseCard(
 private fun CourseHero(
     course: CourseSummaryUiModel,
     currentUser: User,
+    onEditCourse: () -> Unit,
+    onDeleteCourse: () -> Unit,
     onOpenHomework: () -> Unit,
     onOpenDiscussion: () -> Unit
 ) {
@@ -709,6 +780,29 @@ private fun CourseHero(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("查看作业")
+                }
+            }
+            if (currentUser.canManageCourses()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onEditCourse) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("编辑课程")
+                    }
+                    TextButton(onClick = onDeleteCourse) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("删除课程")
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -1309,6 +1403,91 @@ private fun CreatePostDialog(
                 enabled = isValid
             ) {
                 Text("发布")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CourseEditorDialog(
+    title: String,
+    initialCourse: Course? = null,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, description: String?, teacherName: String) -> Unit
+) {
+    var name by rememberSaveable { mutableStateOf(initialCourse?.name.orEmpty()) }
+    var description by rememberSaveable { mutableStateOf(initialCourse?.description.orEmpty()) }
+    var teacherName by rememberSaveable { mutableStateOf(initialCourse?.teacherName.orEmpty()) }
+    val canSubmit = name.isNotBlank() && teacherName.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("课程名称") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = teacherName,
+                    onValueChange = { teacherName = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("教师姓名") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("课程简介") },
+                    minLines = 4
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(
+                        name.trim(),
+                        description.trim().ifBlank { null },
+                        teacherName.trim()
+                    )
+                },
+                enabled = canSubmit
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ConfirmCourseDeleteDialog(
+    courseName: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除课程") },
+        text = { Text("确定删除《$courseName》吗？这个操作不能撤销。") },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("删除")
             }
         },
         dismissButton = {

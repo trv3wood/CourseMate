@@ -83,6 +83,33 @@ class DiscussionViewModel(
         }
     }
 
+    fun updatePost(postId: Int, title: String? = null, content: String? = null, solved: Boolean? = null) {
+        viewModelScope.launch {
+            operationState.value = OperationUiState(isLoading = true)
+            operationState.value = when (
+                val result = postRepository.updatePost(
+                    postId = postId,
+                    title = title,
+                    content = content,
+                    solved = solved
+                )
+            ) {
+                is AppResult.Success -> OperationUiState()
+                is AppResult.Error -> OperationUiState(errorMessage = result.message)
+            }
+        }
+    }
+
+    fun deletePost(postId: Int) {
+        viewModelScope.launch {
+            operationState.value = OperationUiState(isLoading = true)
+            operationState.value = when (val result = postRepository.deletePost(postId)) {
+                is AppResult.Success -> OperationUiState()
+                is AppResult.Error -> OperationUiState(errorMessage = result.message)
+            }
+        }
+    }
+
     fun replyToPost(postId: Int, content: String) {
         viewModelScope.launch {
             operationState.value = OperationUiState(isLoading = true)
@@ -93,11 +120,35 @@ class DiscussionViewModel(
         }
     }
 
-    fun acceptReply(replyId: Int) {
+    fun updateReply(replyId: Int, content: String) {
+        viewModelScope.launch {
+            operationState.value = OperationUiState(isLoading = true)
+            operationState.value = when (val result = postRepository.updateReply(replyId, content)) {
+                is AppResult.Success -> OperationUiState()
+                is AppResult.Error -> OperationUiState(errorMessage = result.message)
+            }
+        }
+    }
+
+    fun deleteReply(replyId: Int) {
+        viewModelScope.launch {
+            operationState.value = OperationUiState(isLoading = true)
+            operationState.value = when (val result = postRepository.deleteReply(replyId)) {
+                is AppResult.Success -> OperationUiState()
+                is AppResult.Error -> OperationUiState(errorMessage = result.message)
+            }
+        }
+    }
+
+    fun acceptReply(replyId: Int, postId: Int) {
         viewModelScope.launch {
             operationState.value = OperationUiState(isLoading = true)
             operationState.value = when (val result = postRepository.acceptReply(replyId)) {
-                is AppResult.Success -> OperationUiState()
+                is AppResult.Success -> {
+                    postRepository.refreshPostDetail(postId)
+                    postRepository.refreshPosts()
+                    OperationUiState()
+                }
                 is AppResult.Error -> OperationUiState(errorMessage = result.message)
             }
         }

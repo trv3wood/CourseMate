@@ -31,3 +31,23 @@ data class HomeworkReadDto(
     @SerializedName("createdAt")
     val createdAt: String
 )
+
+data class HomeworkSubmissionCreateDto(
+    val content: String,
+    @SerializedName("attachmentUrl")
+    val attachmentUrl: String? = null
+)
+
+data class HomeworkSubmissionReadDto(
+    val id: Int,
+    @SerializedName("homeworkId")
+    val homeworkId: Int,
+    @SerializedName("studentId")
+    val studentId: Int,
+    val content: String,
+    @SerializedName("attachmentUrl")
+    val attachmentUrl: String?,
+    @SerializedName("submittedAt")
+    val submittedAt: String,
+    val status: String
+)

@@ -19,4 +19,7 @@ interface ReplyDao {
 
     @Query("DELETE FROM replies WHERE postId = :postId")
     suspend fun deleteForPost(postId: Int)
+
+    @Query("DELETE FROM replies WHERE id = :replyId")
+    suspend fun deleteById(replyId: Int)
 }

@@ -21,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.Person
@@ -63,6 +65,9 @@ import com.example.coursemate.model.Post
 import com.example.coursemate.model.PostDetail
 import com.example.coursemate.model.Reply
 import com.example.coursemate.model.User
+import com.example.coursemate.utils.canAcceptReply
+import com.example.coursemate.utils.canManagePost
+import com.example.coursemate.utils.canManageReply
 import com.example.coursemate.utils.formatDateTime
 import com.example.coursemate.utils.formatRelativeTime
 import com.example.coursemate.utils.parseDateTime
@@ -79,7 +84,11 @@ fun DiscussionRoute(
     observePostDetail: (Int) -> Flow<PostDetail?>,
     onRefreshPostDetail: (Int) -> Unit,
     onCreatePost: (Int, String, String) -> Unit,
+    onUpdatePost: (Int, String, String) -> Unit,
+    onDeletePost: (Int) -> Unit,
     onReplyToPost: (Int, String) -> Unit,
+    onUpdateReply: (Int, String, Int) -> Unit,
+    onDeleteReply: (Int, Int) -> Unit,
     onAcceptReply: (Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -226,6 +235,19 @@ fun DiscussionRoute(
             onReply = { content ->
                 selectedPostId?.let { onReplyToPost(it, content) }
             },
+            onUpdatePost = { title, content ->
+                selectedPostId?.let { onUpdatePost(it, title, content) }
+            },
+            onDeletePost = {
+                selectedPostId?.let(onDeletePost)
+                selectedPostId = null
+            },
+            onUpdateReply = { replyId, content ->
+                selectedPostId?.let { postId -> onUpdateReply(replyId, content, postId) }
+            },
+            onDeleteReply = { replyId ->
+                selectedPostId?.let { postId -> onDeleteReply(replyId, postId) }
+            },
             onAcceptReply = { replyId ->
                 selectedPostId?.let { onAcceptReply(replyId, it) }
             },
@@ -245,10 +267,72 @@ private fun DiscussionDetailScreen(
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onReply: (String) -> Unit,
+    onUpdatePost: (String, String) -> Unit,
+    onDeletePost: () -> Unit,
+    onUpdateReply: (Int, String) -> Unit,
+    onDeleteReply: (Int) -> Unit,
     onAcceptReply: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var replyContent by rememberSaveable(postDetail?.post?.id) { mutableStateOf("") }
+    var editingPost by rememberSaveable(postDetail?.post?.id) { mutableStateOf(false) }
+    var deletingPost by rememberSaveable(postDetail?.post?.id) { mutableStateOf(false) }
+    var editingReplyId by rememberSaveable(postDetail?.post?.id) { mutableStateOf<Int?>(null) }
+    var deletingReplyId by rememberSaveable(postDetail?.post?.id) { mutableStateOf<Int?>(null) }
+
+    val editingReply = remember(postDetail, editingReplyId) {
+        postDetail?.replies?.firstOrNull { it.id == editingReplyId }
+    }
+    val deletingReply = remember(postDetail, deletingReplyId) {
+        postDetail?.replies?.firstOrNull { it.id == deletingReplyId }
+    }
+
+    if (editingPost && postDetail != null) {
+        EditPostDialog(
+            initialTitle = postDetail.post.title,
+            initialContent = postDetail.post.content,
+            onDismiss = { editingPost = false },
+            onConfirm = { title, content ->
+                onUpdatePost(title, content)
+                editingPost = false
+            }
+        )
+    }
+
+    if (deletingPost && postDetail != null) {
+        ConfirmDeleteDialog(
+            title = "删除话题",
+            message = "确定删除《${postDetail.post.title}》吗？",
+            onDismiss = { deletingPost = false },
+            onConfirm = {
+                deletingPost = false
+                onDeletePost()
+            }
+        )
+    }
+
+    if (editingReply != null) {
+        EditReplyDialog(
+            initialContent = editingReply.content,
+            onDismiss = { editingReplyId = null },
+            onConfirm = { content ->
+                onUpdateReply(editingReply.id, content)
+                editingReplyId = null
+            }
+        )
+    }
+
+    if (deletingReply != null) {
+        ConfirmDeleteDialog(
+            title = "删除回复",
+            message = "确定删除这条回复吗？",
+            onDismiss = { deletingReplyId = null },
+            onConfirm = {
+                onDeleteReply(deletingReply.id)
+                deletingReplyId = null
+            }
+        )
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -317,7 +401,13 @@ private fun DiscussionDetailScreen(
                 }
             } else {
                 item {
-                    PostDetailCard(post = postDetail.post, courseName = courseName)
+                    PostDetailCard(
+                        post = postDetail.post,
+                        courseName = courseName,
+                        canManage = currentUser.canManagePost(postDetail.post),
+                        onEdit = { editingPost = true },
+                        onDelete = { deletingPost = true }
+                    )
                 }
                 item {
                     Text(
@@ -337,10 +427,13 @@ private fun DiscussionDetailScreen(
                     items(postDetail.replies, key = { it.id }) { reply ->
                         ReplyCard(
                             reply = reply,
-                            canAccept = currentUser.id == postDetail.post.authorId &&
+                            canAccept = currentUser.canAcceptReply(postDetail.post) &&
                                 !reply.isAccepted &&
                                 !postDetail.post.solved,
-                            onAccept = { onAcceptReply(reply.id) }
+                            canManage = currentUser.canManageReply(reply),
+                            onAccept = { onAcceptReply(reply.id) },
+                            onEdit = { editingReplyId = reply.id },
+                            onDelete = { deletingReplyId = reply.id }
                         )
                     }
                 }
@@ -425,7 +518,10 @@ private fun PostCard(
 @Composable
 private fun PostDetailCard(
     post: Post,
-    courseName: String
+    courseName: String,
+    canManage: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Card(
         shape = RoundedCornerShape(22.dp),
@@ -463,6 +559,28 @@ private fun PostDetailCard(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (canManage) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onEdit) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("编辑话题")
+                    }
+                    TextButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("删除话题")
+                    }
+                }
+            }
         }
     }
 }
@@ -471,7 +589,10 @@ private fun PostDetailCard(
 private fun ReplyCard(
     reply: Reply,
     canAccept: Boolean,
-    onAccept: () -> Unit
+    canManage: Boolean,
+    onAccept: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -560,6 +681,31 @@ private fun ReplyCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("采纳答案")
+                }
+            }
+            if (canManage) {
+                Row(
+                    modifier = Modifier.align(Alignment.End),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(onClick = onEdit) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("编辑")
+                    }
+                    TextButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("删除")
+                    }
                 }
             }
         }
@@ -707,6 +853,113 @@ private fun CreateTopicDialog(
                 enabled = canSubmit
             ) {
                 Text("发布")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EditPostDialog(
+    initialTitle: String,
+    initialContent: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    var title by rememberSaveable { mutableStateOf(initialTitle) }
+    var content by rememberSaveable { mutableStateOf(initialContent) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑话题") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("标题") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("内容") },
+                    minLines = 4
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(title.trim(), content.trim()) },
+                enabled = title.isNotBlank() && content.isNotBlank()
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EditReplyDialog(
+    initialContent: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var content by rememberSaveable { mutableStateOf(initialContent) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑回复") },
+        text = {
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("回复内容") },
+                minLines = 4
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(content.trim()) },
+                enabled = content.isNotBlank()
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ConfirmDeleteDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("删除")
             }
         },
         dismissButton = {

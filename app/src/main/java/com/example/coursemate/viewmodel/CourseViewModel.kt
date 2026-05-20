@@ -68,4 +68,36 @@ class CourseViewModel(
             }
         }
     }
+
+    fun updateCourse(
+        courseId: Int,
+        name: String? = null,
+        description: String? = null,
+        teacherName: String? = null
+    ) {
+        viewModelScope.launch {
+            operationState.value = OperationUiState(isLoading = true)
+            operationState.value = when (
+                val result = courseRepository.updateCourse(
+                    courseId = courseId,
+                    name = name,
+                    description = description,
+                    teacherName = teacherName
+                )
+            ) {
+                is AppResult.Success -> OperationUiState()
+                is AppResult.Error -> OperationUiState(errorMessage = result.message)
+            }
+        }
+    }
+
+    fun deleteCourse(courseId: Int) {
+        viewModelScope.launch {
+            operationState.value = OperationUiState(isLoading = true)
+            operationState.value = when (val result = courseRepository.deleteCourse(courseId)) {
+                is AppResult.Success -> OperationUiState()
+                is AppResult.Error -> OperationUiState(errorMessage = result.message)
+            }
+        }
+    }
 }

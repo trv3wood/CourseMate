@@ -1,6 +1,7 @@
 package com.example.coursemate.ui.homework
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,19 +18,30 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -41,12 +53,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.coursemate.model.Course
 import com.example.coursemate.model.Homework
+import com.example.coursemate.model.HomeworkSubmission
+import com.example.coursemate.model.User
+import com.example.coursemate.utils.canManageHomework
+import com.example.coursemate.utils.canSubmitHomework
+import com.example.coursemate.utils.canViewHomeworkSubmissions
 import com.example.coursemate.utils.formatRelativeTime
 import com.example.coursemate.utils.formatShortDateTime
 import com.example.coursemate.utils.parseDateTime
@@ -70,29 +86,57 @@ private enum class HomeworkBucket {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeworkRoute(
+    currentUser: User,
     uiState: HomeworkUiState,
     courses: List<Course>,
     onRefresh: () -> Unit,
+    onCreateHomework: (Int, String, String, String?, String) -> Unit,
+    onUpdateHomework: (Int, String?, String?, String?, String?) -> Unit,
+    onDeleteHomework: (Int) -> Unit,
+    onSubmitHomework: (Int, String, String?) -> Unit,
+    onLoadHomeworkSubmissions: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedFilter by rememberSaveable { mutableStateOf(HomeworkFilter.Pending) }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    var editingHomeworkId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var deletingHomeworkId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var submitHomeworkId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var viewingHomeworkId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var showMySubmissions by rememberSaveable { mutableStateOf(false) }
+
     val courseNameById = remember(courses) { courses.associateBy({ it.id }, { it.name }) }
-    val urgentHomework = remember(uiState.homework) {
+    val latestSubmissionByHomeworkId = remember(uiState.mySubmissions) {
+        uiState.mySubmissions
+            .groupBy { it.homeworkId }
+            .mapValues { (_, submissions) ->
+                submissions.maxByOrNull { parseDateTime(it.submittedAt) ?: LocalDateTime.MIN }
+            }
+    }
+    val urgentHomework = remember(uiState.homework, latestSubmissionByHomeworkId) {
         uiState.homework
-            .filter { classifyHomework(it) == HomeworkBucket.Pending }
+            .filter {
+                classifyHomework(it, latestSubmissionByHomeworkId[it.id]) == HomeworkBucket.Pending
+            }
             .filter { item ->
                 val deadline = parseDateTime(item.deadline) ?: return@filter false
                 Duration.between(LocalDateTime.now(), deadline).toDays() in 0..7
             }
             .sortedBy { parseDateTime(it.deadline) }
     }
-    val filteredHomework = remember(uiState.homework, selectedFilter) {
+    val filteredHomework = remember(uiState.homework, selectedFilter, latestSubmissionByHomeworkId) {
         uiState.homework
             .filter { item ->
                 when (selectedFilter) {
-                    HomeworkFilter.Pending -> classifyHomework(item) == HomeworkBucket.Pending
-                    HomeworkFilter.Submitted -> classifyHomework(item) == HomeworkBucket.Submitted
-                    HomeworkFilter.Expired -> classifyHomework(item) == HomeworkBucket.Expired
+                    HomeworkFilter.Pending -> {
+                        classifyHomework(item, latestSubmissionByHomeworkId[item.id]) == HomeworkBucket.Pending
+                    }
+                    HomeworkFilter.Submitted -> {
+                        classifyHomework(item, latestSubmissionByHomeworkId[item.id]) == HomeworkBucket.Submitted
+                    }
+                    HomeworkFilter.Expired -> {
+                        classifyHomework(item, latestSubmissionByHomeworkId[item.id]) == HomeworkBucket.Expired
+                    }
                     HomeworkFilter.All -> true
                 }
             }
@@ -108,6 +152,86 @@ fun HomeworkRoute(
             val urgentIds = urgentHomework.map { it.id }.toSet()
             filteredHomework.filterNot { it.id in urgentIds }
         }
+    }
+    val editingHomework = remember(editingHomeworkId, uiState.homework) {
+        uiState.homework.firstOrNull { it.id == editingHomeworkId }
+    }
+    val deletingHomework = remember(deletingHomeworkId, uiState.homework) {
+        uiState.homework.firstOrNull { it.id == deletingHomeworkId }
+    }
+    val submittingHomework = remember(submitHomeworkId, uiState.homework) {
+        uiState.homework.firstOrNull { it.id == submitHomeworkId }
+    }
+    val viewingHomework = remember(viewingHomeworkId, uiState.homework) {
+        uiState.homework.firstOrNull { it.id == viewingHomeworkId }
+    }
+
+    if (showCreateDialog) {
+        HomeworkEditorDialog(
+            courses = courses,
+            title = "发布作业",
+            onDismiss = { showCreateDialog = false },
+            onConfirm = { courseId, title, content, deadline, status ->
+                onCreateHomework(courseId, title, content, deadline, status)
+                showCreateDialog = false
+            }
+        )
+    }
+
+    if (editingHomework != null) {
+        HomeworkEditorDialog(
+            courses = courses,
+            title = "编辑作业",
+            initialHomework = editingHomework,
+            onDismiss = { editingHomeworkId = null },
+            onConfirm = { _, title, content, deadline, status ->
+                onUpdateHomework(editingHomework.id, title, content, deadline, status)
+                editingHomeworkId = null
+            }
+        )
+    }
+
+    if (deletingHomework != null) {
+        ConfirmDeleteDialog(
+            title = "删除作业",
+            message = "确定删除《${deletingHomework.title}》吗？这个操作不能撤销。",
+            onDismiss = { deletingHomeworkId = null },
+            onConfirm = {
+                onDeleteHomework(deletingHomework.id)
+                deletingHomeworkId = null
+            }
+        )
+    }
+
+    if (submittingHomework != null) {
+        val existingSubmission = latestSubmissionByHomeworkId[submittingHomework.id]
+        SubmissionEditorDialog(
+            homework = submittingHomework,
+            existingSubmission = existingSubmission,
+            onDismiss = { submitHomeworkId = null },
+            onConfirm = { content, attachmentUrl ->
+                onSubmitHomework(submittingHomework.id, content, attachmentUrl)
+                submitHomeworkId = null
+            }
+        )
+    }
+
+    if (viewingHomework != null) {
+        val submissions = uiState.submissionsByHomeworkId[viewingHomework.id].orEmpty()
+        SubmissionListDialog(
+            title = viewingHomework.title,
+            submissions = submissions,
+            courseName = courseNameById[viewingHomework.courseId] ?: "未知课程",
+            onDismiss = { viewingHomeworkId = null }
+        )
+    }
+
+    if (showMySubmissions) {
+        MySubmissionDialog(
+            submissions = uiState.mySubmissions,
+            homeworkTitleById = uiState.homework.associateBy({ it.id }, { it.title }),
+            onDismiss = { showMySubmissions = false }
+        )
     }
 
     Scaffold(
@@ -141,6 +265,17 @@ fun HomeworkRoute(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer
                 )
             )
+        },
+        floatingActionButton = {
+            if (currentUser.canManageHomework()) {
+                FloatingActionButton(
+                    onClick = { showCreateDialog = true },
+                    shape = RoundedCornerShape(18.dp),
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+                ) {
+                    Icon(Icons.Outlined.Add, contentDescription = "发布作业")
+                }
+            }
         }
     ) { innerPadding ->
         LazyColumn(
@@ -161,6 +296,20 @@ fun HomeworkRoute(
                     }
                 }
             }
+            if (currentUser.canSubmitHomework()) {
+                item {
+                    SummaryActionCard(
+                        title = "我的提交记录",
+                        message = if (uiState.mySubmissions.isEmpty()) {
+                            "你还没有提交任何作业。"
+                        } else {
+                            "已记录 ${uiState.mySubmissions.size} 次作业提交，点击查看详情。"
+                        },
+                        icon = Icons.Outlined.FolderOpen,
+                        onClick = { showMySubmissions = true }
+                    )
+                }
+            }
             if (uiState.errorMessage != null) {
                 item {
                     MessageCard(
@@ -177,7 +326,11 @@ fun HomeworkRoute(
                 item {
                     EmptyCard(
                         title = "暂无作业",
-                        message = "后端还没有布置任何作业。"
+                        message = if (currentUser.canManageHomework()) {
+                            "后端还没有布置任何作业，可以点击右下角先发布一项。"
+                        } else {
+                            "后端还没有布置任何作业。"
+                        }
                     )
                 }
             } else {
@@ -189,11 +342,21 @@ fun HomeworkRoute(
                         HomeworkCard(
                             homework = homework,
                             courseName = courseNameById[homework.courseId] ?: "未知课程",
-                            urgent = true
+                            mySubmission = latestSubmissionByHomeworkId[homework.id],
+                            currentUser = currentUser,
+                            urgent = true,
+                            onSubmit = { submitHomeworkId = homework.id },
+                            onViewMySubmission = { submitHomeworkId = homework.id },
+                            onEdit = { editingHomeworkId = homework.id },
+                            onDelete = { deletingHomeworkId = homework.id },
+                            onViewSubmissions = {
+                                onLoadHomeworkSubmissions(homework.id)
+                                viewingHomeworkId = homework.id
+                            }
                         )
                     }
                     item {
-                        SectionTitle(text = "全部待处理")
+                        SectionTitle(text = "全部作业")
                     }
                 }
                 if (nonUrgentHomework.isEmpty()) {
@@ -207,7 +370,17 @@ fun HomeworkRoute(
                     items(nonUrgentHomework, key = { it.id }) { homework ->
                         HomeworkCard(
                             homework = homework,
-                            courseName = courseNameById[homework.courseId] ?: "未知课程"
+                            courseName = courseNameById[homework.courseId] ?: "未知课程",
+                            mySubmission = latestSubmissionByHomeworkId[homework.id],
+                            currentUser = currentUser,
+                            onSubmit = { submitHomeworkId = homework.id },
+                            onViewMySubmission = { submitHomeworkId = homework.id },
+                            onEdit = { editingHomeworkId = homework.id },
+                            onDelete = { deletingHomeworkId = homework.id },
+                            onViewSubmissions = {
+                                onLoadHomeworkSubmissions(homework.id)
+                                viewingHomeworkId = homework.id
+                            }
                         )
                     }
                 }
@@ -220,10 +393,18 @@ fun HomeworkRoute(
 private fun HomeworkCard(
     homework: Homework,
     courseName: String,
+    mySubmission: HomeworkSubmission?,
+    currentUser: User,
+    onSubmit: () -> Unit,
+    onViewMySubmission: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onViewSubmissions: () -> Unit,
     urgent: Boolean = false
 ) {
-    val bucket = classifyHomework(homework)
+    val bucket = classifyHomework(homework, mySubmission)
     Card(
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -233,7 +414,7 @@ private fun HomeworkCard(
                 Box(
                     modifier = Modifier
                         .width(4.dp)
-                        .height(112.dp)
+                        .height(128.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(MaterialTheme.colorScheme.error)
                 )
@@ -292,6 +473,47 @@ private fun HomeworkCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (currentUser.canSubmitHomework()) {
+                        TextButton(onClick = if (mySubmission == null) onSubmit else onViewMySubmission) {
+                            Icon(
+                                imageVector = Icons.Outlined.Send,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (mySubmission == null) "提交作业" else "查看提交")
+                        }
+                    }
+                    if (currentUser.canViewHomeworkSubmissions()) {
+                        TextButton(onClick = onViewSubmissions) {
+                            Text("提交列表")
+                        }
+                    }
+                    if (currentUser.canManageHomework()) {
+                        TextButton(onClick = onEdit) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("编辑")
+                        }
+                        TextButton(onClick = onDelete) {
+                            Icon(
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("删除")
+                        }
+                    }
+                }
             }
         }
     }
@@ -342,6 +564,359 @@ private fun FilterPill(
             fontWeight = FontWeight.Medium
         )
     }
+}
+
+@Composable
+private fun SummaryActionCard(
+    title: String,
+    message: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeworkEditorDialog(
+    courses: List<Course>,
+    title: String,
+    initialHomework: Homework? = null,
+    onDismiss: () -> Unit,
+    onConfirm: (courseId: Int, title: String, content: String, deadline: String?, status: String) -> Unit
+) {
+    var selectedCourseId by rememberSaveable { mutableStateOf(initialHomework?.courseId ?: courses.firstOrNull()?.id) }
+    var homeworkTitle by rememberSaveable { mutableStateOf(initialHomework?.title.orEmpty()) }
+    var content by rememberSaveable { mutableStateOf(initialHomework?.content.orEmpty()) }
+    var deadline by rememberSaveable { mutableStateOf(initialHomework?.deadline.orEmpty()) }
+    var status by rememberSaveable { mutableStateOf(initialHomework?.status ?: "open") }
+    val canSubmit = selectedCourseId != null && homeworkTitle.isNotBlank() && content.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (courses.isEmpty()) {
+                    Text(
+                        text = "当前没有课程，无法发布作业。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    Text(
+                        text = "所属课程",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        courses.forEach { course ->
+                            FilterPill(
+                                text = course.name,
+                                selected = selectedCourseId == course.id,
+                                onClick = { selectedCourseId = course.id }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = homeworkTitle,
+                    onValueChange = { homeworkTitle = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("标题") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("内容") },
+                    minLines = 4
+                )
+                OutlinedTextField(
+                    value = deadline,
+                    onValueChange = { deadline = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("截止时间") },
+                    supportingText = { Text("使用 2026-06-01T23:59:00 这种格式，留空则不设置") }
+                )
+                OutlinedTextField(
+                    value = status,
+                    onValueChange = { status = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("状态") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(
+                        selectedCourseId!!,
+                        homeworkTitle.trim(),
+                        content.trim(),
+                        deadline.trim().ifBlank { null },
+                        status.trim().ifBlank { "open" }
+                    )
+                },
+                enabled = canSubmit
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SubmissionEditorDialog(
+    homework: Homework,
+    existingSubmission: HomeworkSubmission?,
+    onDismiss: () -> Unit,
+    onConfirm: (content: String, attachmentUrl: String?) -> Unit
+) {
+    var content by rememberSaveable { mutableStateOf(existingSubmission?.content.orEmpty()) }
+    var attachmentUrl by rememberSaveable { mutableStateOf(existingSubmission?.attachmentUrl.orEmpty()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (existingSubmission == null) "提交作业" else "查看 / 重新提交") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = homework.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "截止 ${formatShortDateTime(homework.deadline)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (existingSubmission != null) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer
+                    ) {
+                        Text(
+                            text = "最近一次提交：${formatShortDateTime(existingSubmission.submittedAt)}",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("提交内容") },
+                    minLines = 4
+                )
+                OutlinedTextField(
+                    value = attachmentUrl,
+                    onValueChange = { attachmentUrl = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("附件链接") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(content.trim(), attachmentUrl.trim().ifBlank { null }) },
+                enabled = content.isNotBlank()
+            ) {
+                Text(if (existingSubmission == null) "提交" else "重新提交")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SubmissionListDialog(
+    title: String,
+    submissions: List<HomeworkSubmission>,
+    courseName: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("提交记录") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = courseName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (submissions.isEmpty()) {
+                    Text(
+                        text = "还没有学生提交这项作业。",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    submissions.sortedByDescending { parseDateTime(it.submittedAt) }.forEach { submission ->
+                        SubmissionRow(
+                            title = "学生 #${submission.studentId}",
+                            content = submission.content,
+                            footer = "${submission.status} · ${formatShortDateTime(submission.submittedAt)}"
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+@Composable
+private fun MySubmissionDialog(
+    submissions: List<HomeworkSubmission>,
+    homeworkTitleById: Map<Int, String>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("我的提交") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (submissions.isEmpty()) {
+                    Text(
+                        text = "暂无提交记录。",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    submissions.sortedByDescending { parseDateTime(it.submittedAt) }.forEach { submission ->
+                        SubmissionRow(
+                            title = homeworkTitleById[submission.homeworkId] ?: "作业 #${submission.homeworkId}",
+                            content = submission.content,
+                            footer = "${submission.status} · ${formatShortDateTime(submission.submittedAt)}"
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SubmissionRow(
+    title: String,
+    content: String,
+    footer: String
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = footer,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConfirmDeleteDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("删除")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }
 
 @Composable
@@ -399,7 +974,7 @@ private fun EmptyCard(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
-                imageVector = Icons.Outlined.Assignment,
+                imageVector = Icons.AutoMirrored.Outlined.Assignment,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
             )
@@ -440,8 +1015,11 @@ private fun LoadingCard(text: String) {
     }
 }
 
-private fun classifyHomework(homework: Homework): HomeworkBucket {
-    if (homework.status.equals("submitted", ignoreCase = true)) {
+private fun classifyHomework(
+    homework: Homework,
+    mySubmission: HomeworkSubmission?
+): HomeworkBucket {
+    if (mySubmission != null) {
         return HomeworkBucket.Submitted
     }
     val deadline = parseDateTime(homework.deadline)

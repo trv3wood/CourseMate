@@ -7,12 +7,14 @@ import com.example.coursemate.local.entity.ReplyEntity
 import com.example.coursemate.local.entity.UserEntity
 import com.example.coursemate.model.Course
 import com.example.coursemate.model.Homework
+import com.example.coursemate.model.HomeworkSubmission
 import com.example.coursemate.model.Notification
 import com.example.coursemate.model.Post
 import com.example.coursemate.model.Reply
 import com.example.coursemate.model.User
 import com.example.coursemate.network.dto.CourseReadDto
 import com.example.coursemate.network.dto.HomeworkReadDto
+import com.example.coursemate.network.dto.HomeworkSubmissionReadDto
 import com.example.coursemate.network.dto.NotificationReadDto
 import com.example.coursemate.network.dto.PostDetailDto
 import com.example.coursemate.network.dto.PostReadDto
@@ -69,6 +71,16 @@ internal fun HomeworkEntity.toModel() = Homework(
     deadline = deadline,
     status = status,
     createdAt = createdAt
+)
+
+internal fun HomeworkSubmissionReadDto.toModel() = HomeworkSubmission(
+    id = id,
+    homeworkId = homeworkId,
+    studentId = studentId,
+    content = content,
+    attachmentUrl = attachmentUrl,
+    submittedAt = submittedAt,
+    status = status
 )
 
 internal fun PostReadDto.toEntity() = PostEntity(

@@ -9,6 +9,12 @@ data class PostCreateDto(
     val content: String
 )
 
+data class PostUpdateDto(
+    val title: String? = null,
+    val content: String? = null,
+    val solved: Boolean? = null
+)
+
 data class PostReadDto(
     val id: Int,
     @SerializedName("courseId")
@@ -37,6 +43,10 @@ data class PostDetailDto(
 )
 
 data class ReplyCreateDto(
+    val content: String
+)
+
+data class ReplyUpdateDto(
     val content: String
 )
 

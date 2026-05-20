@@ -2,9 +2,12 @@ package com.example.coursemate.repository
 
 import com.example.coursemate.local.dao.HomeworkDao
 import com.example.coursemate.model.Homework
+import com.example.coursemate.model.HomeworkSubmission
 import com.example.coursemate.network.api.HomeworkApi
 import com.example.coursemate.network.dto.HomeworkCreateDto
+import com.example.coursemate.network.dto.HomeworkSubmissionCreateDto
 import com.example.coursemate.network.dto.HomeworkUpdateDto
+import com.example.coursemate.repository.toModel
 import com.example.coursemate.utils.AppResult
 import com.example.coursemate.utils.safeCall
 import kotlinx.coroutines.flow.Flow
@@ -87,5 +90,38 @@ class HomeworkRepository(
             error("Delete homework failed with HTTP ${response.code()}")
         }
         homeworkDao.deleteById(homeworkId)
+    }
+
+    suspend fun submitHomework(
+        homeworkId: Int,
+        content: String,
+        attachmentUrl: String?
+    ): AppResult<HomeworkSubmission> = safeCall {
+        homeworkApi.submitHomework(
+            homeworkId = homeworkId,
+            request = HomeworkSubmissionCreateDto(
+                content = content,
+                attachmentUrl = attachmentUrl
+            )
+        ).toModel()
+    }
+
+    suspend fun listHomeworkSubmissions(
+        homeworkId: Int,
+        skip: Int = 0,
+        limit: Int = 100
+    ): AppResult<List<HomeworkSubmission>> = safeCall {
+        homeworkApi.listHomeworkSubmissions(
+            homeworkId = homeworkId,
+            skip = skip,
+            limit = limit
+        ).map { it.toModel() }
+    }
+
+    suspend fun listMySubmissions(
+        skip: Int = 0,
+        limit: Int = 100
+    ): AppResult<List<HomeworkSubmission>> = safeCall {
+        homeworkApi.listMySubmissions(skip = skip, limit = limit).map { it.toModel() }
     }
 }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,6 +73,15 @@ private enum class AuthMode {
     Register
 }
 
+private enum class RegisterRole(
+    val value: String,
+    val label: String
+) {
+    Student("student", "学生"),
+    Teacher("teacher", "教师"),
+    Admin("admin", "管理员")
+}
+
 @Composable
 fun LoginRegisterRoute(
     modifier: Modifier = Modifier
@@ -103,6 +113,7 @@ fun LoginRegisterScreen(
     var password by rememberSaveable { mutableStateOf("") }
     var confirmPassword by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var selectedRole by rememberSaveable { mutableStateOf(RegisterRole.Student) }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
 
     val isRegister = mode == AuthMode.Register
@@ -179,6 +190,30 @@ fun LoginRegisterScreen(
                     ),
                     modifier = Modifier.testTag("auth_email_field")
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "注册身份",
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    RegisterRole.entries.forEach { role ->
+                        RoleChip(
+                            text = role.label,
+                            selected = selectedRole == role,
+                            onClick = {
+                                selectedRole = role
+                                localError = null
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             } else {
                 CourseMateTextField(
                     value = username,
@@ -278,7 +313,7 @@ fun LoginRegisterScreen(
                     )
                     if (localError == null) {
                         if (isRegister) {
-                            onRegister(username.trim(), email.trim(), password, "student")
+                            onRegister(username.trim(), email.trim(), password, selectedRole.value)
                         } else {
                             onLogin(username.trim(), password)
                         }
@@ -464,6 +499,31 @@ private fun CourseMateTextField(
             cursorColor = MaterialTheme.colorScheme.primary
         )
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RoleChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(vertical = 10.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center
+        )
+    }
 }
 
 private fun validateAuthInput(

@@ -51,6 +51,7 @@ import com.example.coursemate.viewmodel.AuthViewModel
 import com.example.coursemate.viewmodel.CourseViewModel
 import com.example.coursemate.viewmodel.DiscussionViewModel
 import com.example.coursemate.viewmodel.HomeworkViewModel
+import com.example.coursemate.viewmodel.NotificationViewModel
 
 private enum class MainDestination(
     val label: String,
@@ -138,10 +139,18 @@ private fun AuthenticatedHomeRoute(
             }
         }
     )
+    val notificationViewModel: NotificationViewModel = viewModel(
+        factory = remember(appContainer) {
+            viewModelFactory {
+                initializer { NotificationViewModel(appContainer.notificationRepository) }
+            }
+        }
+    )
 
     val courseState by courseViewModel.uiState.collectAsState()
     val homeworkState by homeworkViewModel.uiState.collectAsState()
     val discussionState by discussionViewModel.uiState.collectAsState()
+    val notificationState by notificationViewModel.uiState.collectAsState()
     var destination by rememberSaveable { mutableStateOf(MainDestination.Courses) }
 
     Scaffold(
@@ -164,6 +173,9 @@ private fun AuthenticatedHomeRoute(
                     onRefreshCourses = courseViewModel::refreshCourses,
                     onRefreshHomework = homeworkViewModel::refreshHomework,
                     onRefreshPosts = discussionViewModel::refreshPosts,
+                    onCreateCourse = courseViewModel::createCourse,
+                    onUpdateCourse = courseViewModel::updateCourse,
+                    onDeleteCourse = courseViewModel::deleteCourse,
                     onCreatePost = discussionViewModel::createPost,
                     onNavigateToHomeworkTab = { destination = MainDestination.Homework },
                     onNavigateToDiscussionTab = { destination = MainDestination.Discussion },
@@ -173,9 +185,15 @@ private fun AuthenticatedHomeRoute(
 
             MainDestination.Homework -> {
                 HomeworkRoute(
+                    currentUser = currentUser,
                     uiState = homeworkState,
                     courses = courseState.courses,
                     onRefresh = homeworkViewModel::refreshHomework,
+                    onCreateHomework = homeworkViewModel::createHomework,
+                    onUpdateHomework = homeworkViewModel::updateHomework,
+                    onDeleteHomework = homeworkViewModel::deleteHomework,
+                    onSubmitHomework = homeworkViewModel::submitHomework,
+                    onLoadHomeworkSubmissions = homeworkViewModel::loadHomeworkSubmissions,
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -189,11 +207,19 @@ private fun AuthenticatedHomeRoute(
                     observePostDetail = discussionViewModel::observePostDetail,
                     onRefreshPostDetail = discussionViewModel::refreshPostDetail,
                     onCreatePost = discussionViewModel::createPost,
+                    onUpdatePost = { postId, title, content ->
+                        discussionViewModel.updatePost(postId, title = title, content = content)
+                    },
+                    onDeletePost = discussionViewModel::deletePost,
                     onReplyToPost = discussionViewModel::replyToPost,
+                    onUpdateReply = { replyId, content, _ ->
+                        discussionViewModel.updateReply(replyId, content)
+                    },
+                    onDeleteReply = { replyId, _ ->
+                        discussionViewModel.deleteReply(replyId)
+                    },
                     onAcceptReply = { replyId, postId ->
-                        discussionViewModel.acceptReply(replyId)
-                        discussionViewModel.refreshPostDetail(postId)
-                        discussionViewModel.refreshPosts()
+                        discussionViewModel.acceptReply(replyId, postId)
                     },
                     modifier = Modifier.padding(innerPadding)
                 )
@@ -205,6 +231,8 @@ private fun AuthenticatedHomeRoute(
                     courseCount = courseState.courses.size,
                     homeworkCount = homeworkState.homework.size,
                     discussionCount = discussionState.posts.size,
+                    notificationUiState = notificationState,
+                    onRefreshNotifications = notificationViewModel::refreshNotifications,
                     onLogout = authViewModel::logout,
                     modifier = Modifier.padding(innerPadding)
                 )
