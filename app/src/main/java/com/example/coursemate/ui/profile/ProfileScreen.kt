@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Forum
-import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.School
@@ -150,7 +150,7 @@ fun ProfileRoute(
                     StatCard(
                         label = "作业",
                         value = homeworkCount.toString(),
-                        icon = Icons.Outlined.Assignment,
+                        icon = Icons.AutoMirrored.Outlined.Assignment,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
@@ -248,7 +248,7 @@ fun ProfileRoute(
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Logout,
+                        imageVector = Icons.AutoMirrored.Outlined.Logout,
                         contentDescription = null
                     )
                     Text(

@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.School
@@ -58,7 +58,7 @@ private enum class MainDestination(
     val icon: ImageVector
 ) {
     Courses("课程", Icons.Outlined.School),
-    Homework("作业", Icons.Outlined.Assignment),
+    Homework("作业", Icons.AutoMirrored.Outlined.Assignment),
     Discussion("讨论", Icons.Outlined.Forum),
     Profile("个人", Icons.Outlined.Person)
 }

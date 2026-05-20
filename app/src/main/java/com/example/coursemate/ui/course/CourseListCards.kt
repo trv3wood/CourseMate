@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Person
@@ -109,7 +109,7 @@ internal fun FeaturedCourseCard(
             Spacer(modifier = Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricChip(
-                    icon = Icons.Outlined.Assignment,
+                    icon = Icons.AutoMirrored.Outlined.Assignment,
                     text = "${course.homeworkCount} 个作业"
                 )
                 MetricChip(
@@ -184,7 +184,7 @@ internal fun CompactCourseCard(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MetricChip(
-                        icon = Icons.Outlined.Assignment,
+                        icon = Icons.AutoMirrored.Outlined.Assignment,
                         text = "${course.homeworkCount}"
                     )
                     MetricChip(
