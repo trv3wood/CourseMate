@@ -1,30 +1,30 @@
 package com.example.coursemate.ui.discussion
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.example.coursemate.model.Course
 import com.example.coursemate.model.PostDetail
 import com.example.coursemate.model.User
+import com.example.coursemate.ui.common.PullRefreshContainer
 import com.example.coursemate.utils.canAcceptReply
 import com.example.coursemate.utils.canManagePost
 import com.example.coursemate.utils.canManageReply
@@ -65,6 +66,9 @@ fun DiscussionRoute(
     modifier: Modifier = Modifier
 ) {
     val courseNameById = remember(courses) { courses.associateBy({ it.id }, { it.name }) }
+    val postCountByCourseId = remember(uiState.posts) {
+        uiState.posts.groupingBy { it.courseId }.eachCount()
+    }
     var selectedCourseId by rememberSaveable { mutableStateOf<Int?>(null) }
     var selectedPostId by rememberSaveable { mutableStateOf<Int?>(null) }
     var showComposer by rememberSaveable { mutableStateOf(false) }
@@ -91,35 +95,6 @@ fun DiscussionRoute(
         Scaffold(
             modifier = modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text("讨论中心")
-                            Text(
-                                text = "${filteredPosts.size} 条话题",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = onRefreshPosts) {
-                            if (uiState.isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(Icons.Outlined.Refresh, contentDescription = "刷新讨论")
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    )
-                )
-            },
             floatingActionButton = {
                 FloatingActionButton(
                     onClick = { showComposer = true },
@@ -130,60 +105,67 @@ fun DiscussionRoute(
                 }
             }
         ) { innerPadding ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            PullRefreshContainer(
+                isRefreshing = uiState.isLoading,
+                onRefresh = onRefreshPosts,
+                modifier = Modifier.padding(innerPadding)
             ) {
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CourseFilterChip(
-                            text = "全部课程",
-                            selected = selectedCourseId == null,
-                            onClick = { selectedCourseId = null }
-                        )
-                        courses.forEach { course ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             CourseFilterChip(
-                                text = course.name,
-                                selected = selectedCourseId == course.id,
-                                onClick = { selectedCourseId = course.id }
+                                text = "全部 ${uiState.posts.size}",
+                                selected = selectedCourseId == null,
+                                onClick = { selectedCourseId = null }
+                            )
+                            courses.forEach { course ->
+                                CourseFilterChip(
+                                    text = "${course.name} ${postCountByCourseId[course.id] ?: 0}",
+                                    selected = selectedCourseId == course.id,
+                                    onClick = { selectedCourseId = course.id }
+                                )
+                            }
+                        }
+                    }
+                    if (uiState.errorMessage != null) {
+                        item {
+                            InfoCard(
+                                title = "讨论同步失败",
+                                message = uiState.errorMessage,
+                                error = true
                             )
                         }
                     }
-                }
-                if (uiState.errorMessage != null) {
-                    item {
-                        InfoCard(
-                            title = "讨论同步失败",
-                            message = uiState.errorMessage,
-                            error = true
-                        )
-                    }
-                }
-                if (uiState.isLoading && uiState.posts.isEmpty()) {
-                    item {
-                        LoadingCard(text = "正在同步讨论话题")
-                    }
-                } else if (filteredPosts.isEmpty()) {
-                    item {
-                        InfoCard(
-                            title = "暂无讨论",
-                            message = if (courses.isEmpty()) {
-                                "还没有课程，暂时无法发起讨论。"
-                            } else {
-                                "当前筛选下还没有话题，可以新建一个。"
-                            }
-                        )
-                    }
-                } else {
-                    items(filteredPosts, key = { it.id }) { post ->
-                        PostCard(
-                            post = post,
-                            courseName = courseNameById[post.courseId] ?: "未知课程",
-                            onClick = { selectedPostId = post.id }
-                        )
+                    if (uiState.isLoading && uiState.posts.isEmpty()) {
+                        item {
+                            LoadingCard(text = "正在同步讨论话题")
+                        }
+                    } else if (filteredPosts.isEmpty()) {
+                        item {
+                            InfoCard(
+                                title = "暂无讨论",
+                                message = if (courses.isEmpty()) {
+                                    "还没有课程，暂时无法发起讨论。"
+                                } else {
+                                    "当前筛选下还没有话题，可以新建一个。"
+                                }
+                            )
+                        }
+                    } else {
+                        items(filteredPosts, key = { it.id }) { post ->
+                            PostCard(
+                                post = post,
+                                courseName = courseNameById[post.courseId] ?: "未知课程",
+                                onClick = { selectedPostId = post.id }
+                            )
+                        }
                     }
                 }
             }
@@ -309,115 +291,95 @@ private fun DiscussionDetailScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("话题详情")
-                        Text(
-                            text = courseName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回讨论列表")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onRefresh) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Outlined.Refresh, contentDescription = "刷新话题详情")
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            )
-        }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        PullRefreshContainer(
+            isRefreshing = isLoading,
+            onRefresh = onRefresh,
+            modifier = Modifier.padding(innerPadding)
         ) {
-            if (errorMessage != null) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 item {
-                    InfoCard(
-                        title = "详情同步失败",
-                        message = errorMessage,
-                        error = true
-                    )
+                    TextButton(
+                        onClick = onBack,
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回讨论列表")
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("返回讨论列表")
+                    }
                 }
-            }
-            if (isLoading && postDetail == null) {
-                item {
-                    LoadingCard(text = "正在加载话题详情")
-                }
-            } else if (postDetail == null) {
-                item {
-                    InfoCard(
-                        title = "话题不存在",
-                        message = "后端暂时没有返回这条话题详情。"
-                    )
-                }
-            } else {
-                item {
-                    PostDetailCard(
-                        post = postDetail.post,
-                        courseName = courseName,
-                        canManage = currentUser.canManagePost(postDetail.post),
-                        onEdit = { editingPost = true },
-                        onDelete = { deletingPost = true }
-                    )
-                }
-                item {
-                    Text(
-                        text = "回复",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                if (postDetail.replies.isEmpty()) {
+                if (errorMessage != null) {
                     item {
                         InfoCard(
-                            title = "还没有回复",
-                            message = "你可以先给这条话题一个回答。"
+                            title = "详情同步失败",
+                            message = errorMessage,
+                            error = true
+                        )
+                    }
+                }
+                if (isLoading && postDetail == null) {
+                    item {
+                        LoadingCard(text = "正在加载话题详情")
+                    }
+                } else if (postDetail == null) {
+                    item {
+                        InfoCard(
+                            title = "话题不存在",
+                            message = "后端暂时没有返回这条话题详情。"
                         )
                     }
                 } else {
-                    items(postDetail.replies, key = { it.id }) { reply ->
-                        ReplyCard(
-                            reply = reply,
-                            canAccept = currentUser.canAcceptReply(postDetail.post) &&
-                                !reply.isAccepted &&
-                                !postDetail.post.solved,
-                            canManage = currentUser.canManageReply(reply),
-                            onAccept = { onAcceptReply(reply.id) },
-                            onEdit = { editingReplyId = reply.id },
-                            onDelete = { deletingReplyId = reply.id }
+                    item {
+                        PostDetailCard(
+                            post = postDetail.post,
+                            courseName = courseName,
+                            canManage = currentUser.canManagePost(postDetail.post),
+                            onEdit = { editingPost = true },
+                            onDelete = { deletingPost = true }
                         )
                     }
-                }
-                item {
-                    ReplyComposer(
-                        value = replyContent,
-                        onValueChange = { replyContent = it },
-                        onSend = {
-                            onReply(replyContent.trim())
-                            replyContent = ""
+                    item {
+                        Text(
+                            text = "回复 ${postDetail.replies.size}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (postDetail.replies.isEmpty()) {
+                        item {
+                            InfoCard(
+                                title = "还没有回复",
+                                message = "你可以先给这条话题一个回答。"
+                            )
                         }
-                    )
+                    } else {
+                        items(postDetail.replies, key = { it.id }) { reply ->
+                            ReplyCard(
+                                reply = reply,
+                                canAccept = currentUser.canAcceptReply(postDetail.post) &&
+                                    !reply.isAccepted &&
+                                    !postDetail.post.solved,
+                                canManage = currentUser.canManageReply(reply),
+                                onAccept = { onAcceptReply(reply.id) },
+                                onEdit = { editingReplyId = reply.id },
+                                onDelete = { deletingReplyId = reply.id }
+                            )
+                        }
+                    }
+                    item {
+                        ReplyComposer(
+                            value = replyContent,
+                            onValueChange = { replyContent = it },
+                            onSend = {
+                                onReply(replyContent.trim())
+                                replyContent = ""
+                            }
+                        )
+                    }
                 }
             }
         }

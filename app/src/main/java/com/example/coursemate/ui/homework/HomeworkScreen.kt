@@ -1,5 +1,6 @@
 package com.example.coursemate.ui.homework
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,22 +10,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +33,7 @@ import com.example.coursemate.model.Course
 import com.example.coursemate.model.Homework
 import com.example.coursemate.model.HomeworkSubmission
 import com.example.coursemate.model.User
+import com.example.coursemate.ui.common.PullRefreshContainer
 import com.example.coursemate.utils.canManageHomework
 import com.example.coursemate.utils.canSubmitHomework
 import com.example.coursemate.utils.parseDateTime
@@ -121,6 +118,21 @@ fun HomeworkRoute(
                 compareBy<Homework> { parseDateTime(it.deadline) ?: LocalDateTime.MAX }
                     .thenByDescending { parseDateTime(it.createdAt) }
             )
+    }
+    val pendingCount = remember(uiState.homework, latestSubmissionByHomeworkId) {
+        uiState.homework.count {
+            classifyHomework(it, latestSubmissionByHomeworkId[it.id]) == HomeworkBucket.Pending
+        }
+    }
+    val submittedCount = remember(uiState.homework, latestSubmissionByHomeworkId) {
+        uiState.homework.count {
+            classifyHomework(it, latestSubmissionByHomeworkId[it.id]) == HomeworkBucket.Submitted
+        }
+    }
+    val expiredCount = remember(uiState.homework, latestSubmissionByHomeworkId) {
+        uiState.homework.count {
+            classifyHomework(it, latestSubmissionByHomeworkId[it.id]) == HomeworkBucket.Expired
+        }
     }
     val nonUrgentHomework = remember(filteredHomework, urgentHomework, selectedFilter) {
         if (selectedFilter != HomeworkFilter.Pending) {
@@ -214,35 +226,6 @@ fun HomeworkRoute(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("作业中心")
-                        Text(
-                            text = "${uiState.homework.size} 项作业",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onRefresh) {
-                        if (uiState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Outlined.Refresh, contentDescription = "刷新作业")
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            )
-        },
         floatingActionButton = {
             if (currentUser.canManageHomework()) {
                 FloatingActionButton(
@@ -255,110 +238,122 @@ fun HomeworkRoute(
             }
         }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        PullRefreshContainer(
+            isRefreshing = uiState.isLoading,
+            onRefresh = onRefresh,
+            modifier = Modifier.padding(innerPadding)
         ) {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HomeworkFilter.entries.forEach { filter ->
-                        FilterPill(
-                            text = filter.label,
-                            selected = selectedFilter == filter,
-                            onClick = { selectedFilter = filter }
-                        )
-                    }
-                }
-            }
-            if (currentUser.canSubmitHomework()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 item {
-                    SummaryActionCard(
-                        title = "我的提交记录",
-                        message = if (uiState.mySubmissions.isEmpty()) {
-                            "你还没有提交任何作业。"
-                        } else {
-                            "已记录 ${uiState.mySubmissions.size} 次作业提交，点击查看详情。"
-                        },
-                        icon = Icons.Outlined.FolderOpen,
-                        onClick = { showMySubmissions = true }
-                    )
-                }
-            }
-            if (uiState.errorMessage != null) {
-                item {
-                    MessageCard(
-                        title = "作业同步失败",
-                        message = uiState.errorMessage
-                    )
-                }
-            }
-            if (uiState.isLoading && uiState.homework.isEmpty()) {
-                item {
-                    LoadingCard(text = "正在同步作业")
-                }
-            } else if (uiState.homework.isEmpty()) {
-                item {
-                    EmptyCard(
-                        title = "暂无作业",
-                        message = if (currentUser.canManageHomework()) {
-                            "后端还没有布置任何作业，可以点击右下角先发布一项。"
-                        } else {
-                            "后端还没有布置任何作业。"
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        HomeworkFilter.entries.forEach { filter ->
+                            FilterPill(
+                                text = when (filter) {
+                                    HomeworkFilter.Pending -> "${filter.label} $pendingCount"
+                                    HomeworkFilter.Submitted -> "${filter.label} $submittedCount"
+                                    HomeworkFilter.Expired -> "${filter.label} $expiredCount"
+                                    HomeworkFilter.All -> "${filter.label} ${uiState.homework.size}"
+                                },
+                                selected = selectedFilter == filter,
+                                onClick = { selectedFilter = filter }
+                            )
                         }
-                    )
-                }
-            } else {
-                if (selectedFilter == HomeworkFilter.Pending && urgentHomework.isNotEmpty()) {
-                    item {
-                        SectionTitle(text = "近期截止")
                     }
-                    items(urgentHomework, key = { it.id }) { homework ->
-                        HomeworkCard(
-                            homework = homework,
-                            courseName = courseNameById[homework.courseId] ?: "未知课程",
-                            mySubmission = latestSubmissionByHomeworkId[homework.id],
-                            currentUser = currentUser,
-                            urgent = true,
-                            onSubmit = { submitHomeworkId = homework.id },
-                            onViewMySubmission = { submitHomeworkId = homework.id },
-                            onEdit = { editingHomeworkId = homework.id },
-                            onDelete = { deletingHomeworkId = homework.id },
-                            onViewSubmissions = {
-                                onLoadHomeworkSubmissions(homework.id)
-                                viewingHomeworkId = homework.id
-                            }
+                }
+                if (currentUser.canSubmitHomework()) {
+                    item {
+                        SummaryActionCard(
+                            title = "我的提交记录",
+                            message = if (uiState.mySubmissions.isEmpty()) {
+                                "你还没有提交任何作业。"
+                            } else {
+                                "已记录 ${uiState.mySubmissions.size} 次作业提交，点击查看详情。"
+                            },
+                            icon = Icons.Outlined.FolderOpen,
+                            onClick = { showMySubmissions = true }
                         )
                     }
+                }
+                if (uiState.errorMessage != null) {
                     item {
-                        SectionTitle(text = "全部作业")
+                        MessageCard(
+                            title = "作业同步失败",
+                            message = uiState.errorMessage
+                        )
                     }
                 }
-                if (nonUrgentHomework.isEmpty()) {
+                if (uiState.isLoading && uiState.homework.isEmpty()) {
+                    item {
+                        LoadingCard(text = "正在同步作业")
+                    }
+                } else if (uiState.homework.isEmpty()) {
                     item {
                         EmptyCard(
-                            title = "当前筛选下没有作业",
-                            message = "切换上方状态看看其他作业。"
+                            title = "暂无作业",
+                            message = if (currentUser.canManageHomework()) {
+                                "后端还没有布置任何作业，可以点击右下角先发布一项。"
+                            } else {
+                                "后端还没有布置任何作业。"
+                            }
                         )
                     }
                 } else {
-                    items(nonUrgentHomework, key = { it.id }) { homework ->
-                        HomeworkCard(
-                            homework = homework,
-                            courseName = courseNameById[homework.courseId] ?: "未知课程",
-                            mySubmission = latestSubmissionByHomeworkId[homework.id],
-                            currentUser = currentUser,
-                            onSubmit = { submitHomeworkId = homework.id },
-                            onViewMySubmission = { submitHomeworkId = homework.id },
-                            onEdit = { editingHomeworkId = homework.id },
-                            onDelete = { deletingHomeworkId = homework.id },
-                            onViewSubmissions = {
-                                onLoadHomeworkSubmissions(homework.id)
-                                viewingHomeworkId = homework.id
-                            }
-                        )
+                    if (selectedFilter == HomeworkFilter.Pending && urgentHomework.isNotEmpty()) {
+                        item {
+                            SectionTitle(text = "近期截止")
+                        }
+                        items(urgentHomework, key = { it.id }) { homework ->
+                            HomeworkCard(
+                                homework = homework,
+                                courseName = courseNameById[homework.courseId] ?: "未知课程",
+                                mySubmission = latestSubmissionByHomeworkId[homework.id],
+                                currentUser = currentUser,
+                                urgent = true,
+                                onSubmit = { submitHomeworkId = homework.id },
+                                onViewMySubmission = { submitHomeworkId = homework.id },
+                                onEdit = { editingHomeworkId = homework.id },
+                                onDelete = { deletingHomeworkId = homework.id },
+                                onViewSubmissions = {
+                                    onLoadHomeworkSubmissions(homework.id)
+                                    viewingHomeworkId = homework.id
+                                }
+                            )
+                        }
+                        item {
+                            SectionTitle(text = "全部作业")
+                        }
+                    }
+                    if (nonUrgentHomework.isEmpty()) {
+                        item {
+                            EmptyCard(
+                                title = "当前筛选下没有作业",
+                                message = "切换上方状态看看其他作业。"
+                            )
+                        }
+                    } else {
+                        items(nonUrgentHomework, key = { it.id }) { homework ->
+                            HomeworkCard(
+                                homework = homework,
+                                courseName = courseNameById[homework.courseId] ?: "未知课程",
+                                mySubmission = latestSubmissionByHomeworkId[homework.id],
+                                currentUser = currentUser,
+                                onSubmit = { submitHomeworkId = homework.id },
+                                onViewMySubmission = { submitHomeworkId = homework.id },
+                                onEdit = { editingHomeworkId = homework.id },
+                                onDelete = { deletingHomeworkId = homework.id },
+                                onViewSubmissions = {
+                                    onLoadHomeworkSubmissions(homework.id)
+                                    viewingHomeworkId = homework.id
+                                }
+                            )
+                        }
                     }
                 }
             }

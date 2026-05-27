@@ -1,5 +1,6 @@
 package com.example.coursemate.ui.course
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -155,20 +157,29 @@ internal fun CourseHero(
 @Composable
 internal fun CourseDetailTabs(
     selectedTab: CourseDetailTab,
+    homeworkCount: Int,
+    discussionCount: Int,
     onSelect: (CourseDetailTab) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         CourseDetailTab.entries.forEach { tab ->
             val selected = tab == selectedTab
+            val label = when (tab) {
+                CourseDetailTab.Homework -> "${tab.label} $homeworkCount"
+                CourseDetailTab.Discussion -> "${tab.label} $discussionCount"
+                else -> tab.label
+            }
             Column(
                 modifier = Modifier.clickable { onSelect(tab) },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = tab.label,
+                    text = label,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (selected) {
