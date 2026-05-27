@@ -13,6 +13,8 @@ fun User.canManageCourses(): Boolean = hasRole("teacher", "admin")
 
 fun User.canManageHomework(): Boolean = hasRole("teacher", "admin")
 
+fun User.canPublishNotifications(): Boolean = hasRole("teacher", "admin")
+
 fun User.canSubmitHomework(): Boolean = hasRole("student", "admin")
 
 fun User.canManagePost(post: Post): Boolean {

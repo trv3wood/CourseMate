@@ -241,6 +241,7 @@ private fun AuthenticatedHomeRoute(
                     discussionCount = discussionState.posts.size,
                     notificationUiState = notificationState,
                     onRefreshNotifications = notificationViewModel::refreshNotifications,
+                    onCreateNotification = notificationViewModel::createNotification,
                     onLogout = authViewModel::logout,
                     modifier = Modifier.padding(innerPadding)
                 )

@@ -35,4 +35,28 @@ class NotificationViewModel(
             }
         }
     }
+
+    fun createNotification(
+        title: String,
+        message: String,
+        type: String = "course",
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val existing = _uiState.value.notifications
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            when (val result = notificationRepository.createNotification(title, message, type)) {
+                is AppResult.Success -> {
+                    onSuccess()
+                    refreshNotifications()
+                }
+                is AppResult.Error -> {
+                    _uiState.value = NotificationUiState(
+                        notifications = existing,
+                        errorMessage = result.message
+                    )
+                }
+            }
+        }
+    }
 }

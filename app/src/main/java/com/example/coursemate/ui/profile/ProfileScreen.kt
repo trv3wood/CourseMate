@@ -15,24 +15,33 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.School
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.coursemate.model.User
 import com.example.coursemate.ui.common.PullRefreshContainer
+import com.example.coursemate.utils.canPublishNotifications
 import com.example.coursemate.utils.formatDateTime
 import com.example.coursemate.utils.initialsOf
 import com.example.coursemate.viewmodel.NotificationUiState
@@ -45,9 +54,24 @@ fun ProfileRoute(
     discussionCount: Int,
     notificationUiState: NotificationUiState,
     onRefreshNotifications: () -> Unit,
+    onCreateNotification: (title: String, message: String, type: String, onSuccess: () -> Unit) -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showCreateDialog) {
+        CreateNotificationDialog(
+            isSubmitting = notificationUiState.isLoading,
+            onDismiss = { showCreateDialog = false },
+            onConfirm = { title, message, type ->
+                onCreateNotification(title, message, type) {
+                    showCreateDialog = false
+                }
+            }
+        )
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background
@@ -167,26 +191,45 @@ fun ProfileRoute(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Notifications,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Notifications,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "通知",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                     Text(
-                                        text = "通知",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold
+                                        text = "${notificationUiState.notifications.size} 条",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Text(
-                                    text = "${notificationUiState.notifications.size} 条",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                if (currentUser.canPublishNotifications()) {
+                                    TextButton(
+                                        onClick = { showCreateDialog = true },
+                                        enabled = !notificationUiState.isLoading
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Add,
+                                            contentDescription = null
+                                        )
+                                        Text(
+                                            text = "发布通知",
+                                            modifier = Modifier.padding(start = 6.dp)
+                                        )
+                                    }
+                                }
                             }
                             if (notificationUiState.errorMessage != null) {
                                 Text(
@@ -237,6 +280,71 @@ fun ProfileRoute(
             }
         }
     }
+}
+
+@Composable
+private fun CreateNotificationDialog(
+    isSubmitting: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (title: String, message: String, type: String) -> Unit
+) {
+    var title by rememberSaveable { mutableStateOf("") }
+    var message by rememberSaveable { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf("course") }
+    val canSubmit = title.isNotBlank() && message.isNotBlank() && !isSubmitting
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("发布通知") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("标题") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("正文") },
+                    minLines = 4
+                )
+                OutlinedTextField(
+                    value = type,
+                    onValueChange = { type = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("类型") },
+                    supportingText = { Text("默认 course，可按后端约定填写") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(
+                        title.trim(),
+                        message.trim(),
+                        type.trim().ifBlank { "course" }
+                    )
+                },
+                enabled = canSubmit
+            ) {
+                Text(if (isSubmitting) "发布中" else "发布")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSubmitting
+            ) {
+                Text("取消")
+            }
+        }
+    )
 }
 
 @Composable
