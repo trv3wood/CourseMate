@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.example.coursemate.model.Homework
 import com.example.coursemate.model.Post
 import com.example.coursemate.model.User
+import com.example.coursemate.ui.common.markdown.markdownToPlainPreview
 import com.example.coursemate.utils.canManageCourses
 import com.example.coursemate.utils.formatDateTime
 import com.example.coursemate.utils.formatRelativeTime
@@ -289,7 +290,7 @@ internal fun DiscussionHighlightCard(
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = post.content,
+                text = markdownToPlainPreview(post.content),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
@@ -430,7 +431,7 @@ internal fun DiscussionSummaryCard(
                 )
             }
             Text(
-                text = post.content,
+                text = markdownToPlainPreview(post.content),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,

@@ -39,6 +39,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.coursemate.model.Post
 import com.example.coursemate.model.Reply
+import com.example.coursemate.ui.common.markdown.MarkdownText
+import com.example.coursemate.ui.common.markdown.markdownToPlainPreview
 import com.example.coursemate.utils.formatDateTime
 import com.example.coursemate.utils.formatRelativeTime
 
@@ -79,7 +81,7 @@ internal fun PostCard(
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = post.content,
+                text = markdownToPlainPreview(post.content),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
@@ -144,10 +146,11 @@ internal fun PostDetailCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary
             )
-            Text(
-                text = post.content,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            MarkdownText(
+                markdown = post.content,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             )
             if (canManage) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -254,10 +257,11 @@ internal fun ReplyCard(
                     }
                 }
             }
-            Text(
-                text = reply.content,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            MarkdownText(
+                markdown = reply.content,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             )
             if (canAccept) {
                 TextButton(
@@ -326,6 +330,7 @@ internal fun ReplyComposer(
                 onValueChange = onValueChange,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("回复内容") },
+                supportingText = { Text("支持 Markdown") },
                 minLines = 3
             )
             Button(

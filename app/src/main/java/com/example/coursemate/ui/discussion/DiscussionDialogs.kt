@@ -70,6 +70,7 @@ internal fun CreateTopicDialog(
                     onValueChange = { content = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("内容") },
+                    supportingText = { Text("支持 Markdown") },
                     minLines = 4
                 )
             }
@@ -117,6 +118,7 @@ internal fun EditPostDialog(
                     onValueChange = { content = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("内容") },
+                    supportingText = { Text("支持 Markdown") },
                     minLines = 4
                 )
             }
@@ -154,6 +156,7 @@ internal fun EditReplyDialog(
                 onValueChange = { content = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("回复内容") },
+                supportingText = { Text("支持 Markdown") },
                 minLines = 4
             )
         },
